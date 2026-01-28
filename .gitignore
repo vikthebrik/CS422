@@ -1,0 +1,48 @@
+# Node / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Build outputs
+dist/
+build/
+.out/
+.next/
+.vercel/
+coverage/
+
+# Local env + secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+*.log.*
+*.out
+*.pid
+
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+
+# IDE / tooling
+.vscode/
+.idea/
+*.iml
+
+# Misc
+.cache/
+.parcel-cache/
+turbo/
