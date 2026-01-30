@@ -1,0 +1,25 @@
+{
+    "name": "mcc-scheduler-server",
+    "version": "1.0.0",
+    "description": "Backend for MCC Scheduler",
+    "main": "index.js",
+    "scripts": {
+        "start": "node dist/index.js",
+        "build": "tsc",
+        "populate": "ts-node src/scripts/populate_supabase.ts",
+        "sync-all": "ts-node src/scripts/sync_all.ts"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@supabase/supabase-js": "^2.39.3",
+        "dotenv": "^16.4.1",
+        "node-ical": "^0.17.1"
+    },
+    "devDependencies": {
+        "ts-node": "^10.9.2",
+        "typescript": "^5.3.3",
+        "@types/node": "^20.11.16"
+    }
+}
