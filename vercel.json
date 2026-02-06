@@ -1,0 +1,11 @@
+{
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/web/$1"
+        }
+    ],
+    "framework": "vite",
+    "buildCommand": "cd web && npm install && npm run build",
+    "outputDirectory": "web/dist"
+}

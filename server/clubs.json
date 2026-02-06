@@ -3,7 +3,6 @@
         "name": "Muslim Student Association",
         "url": "https://outlook.office365.com/owa/calendar/0b3c29b79d6540fda58bbc8b9f9e7a96@uoregon.edu/d0b72f466a3a478597bc691908ee79077606731028376512974/calendar.ics"
     },
-
     {
         "name": "Latine Male Alliance",
         "url": "https://outlook.office365.com/owa/calendar/06fc038fa24a4985b3ad63bc60e73f37@uoregon.edu/88ef9885660a4a2d8147ed83f17e36d49790674401869721875/calendar.ics"
@@ -40,7 +39,21 @@
     {
         "name": "Kultura Pilipinas",
         "url": "https://outlook.office365.com/owa/calendar/79342d02fb554d10bcc0480f5215f4ba@uoregon.edu/0dd69e8fb3b848848587061e614522dc613638747608014528/calendar.ics"
-    }
+    },
+
+    {
+        "name": "South Asian Cultural Alliance",
+        "url": "https://outlook.office365.com/owa/calendar/72f3e7cddcce492dbc45ae0a005075c2@uoregon.edu/f5e3e77edc904879bdaffcaeea8834e814172889552408584728/calendar.ics"
+    },
+    {
+        "name": "AccessAbility Student Union",
+        "url": "https://outlook.office365.com/owa/calendar/74d2327a843b4b32b03aacae15693219@uoregon.edu/ff5c981a63784cc3a8641bc5e70a503e238860871240309511/calendar.ics"
+
+    },
+    {
+        "name": "Black Student Union",
+        "url": "https://outlook.office365.com/owa/calendar/9d723378e2a04134a40fd8e43c9a5ed8@uoregon.edu/b42e32cbfc4a4549b9d02c5ea6e63a5f4312517814439626783/calendar.ics"
+    }   
 
 
 ]

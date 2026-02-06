@@ -1,20 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../db/supabase';
 import nodeIcal from 'node-ical';
-import dotenv from 'dotenv';
 import path from 'path';
+import dotenv from 'dotenv';
 
-// Load env vars
+// Load env vars explicitly if running as script, though supabase.ts also does it.
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
-
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.error('Error: SUPABASE_URL and SUPABASE_KEY must be set in .env');
-    process.exit(1);
-}
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export async function populate(clubName: string, icsUrl: string) {
     console.log(`Starting population for club: ${clubName}`);
