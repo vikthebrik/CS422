@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { supabase } from './db/supabase';
+import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -13,9 +14,31 @@ app.get('/', (req, res) => {
     res.send('MCC Scheduler API is running');
 });
 
+// Cache administration (intended for internal use or protected via network/firewall)
+app.post('/admin/cache/clear-events', (req, res) => {
+    clearCacheKey('events:all');
+    res.json({ status: 'ok', cleared: 'events:all' });
+});
+
+app.post('/admin/cache/clear-clubs', (req, res) => {
+    clearCacheKey('clubs:all');
+    res.json({ status: 'ok', cleared: 'clubs:all' });
+});
+
+app.post('/admin/cache/clear-all', (req, res) => {
+    clearAllCache();
+    res.json({ status: 'ok', cleared: 'all' });
+});
+
 // Get all events
 app.get('/events', async (req, res) => {
     try {
+        const cacheKey = 'events:all';
+        const cached = getFromCache<any[]>(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
+
         const { data, error } = await supabase
             .from('events')
             .select('*')
@@ -25,6 +48,7 @@ app.get('/events', async (req, res) => {
             throw error;
         }
 
+        setInCache(cacheKey, data ?? []);
         res.json(data);
     } catch (err: any) {
         console.error('Error fetching events:', err);
@@ -35,6 +59,12 @@ app.get('/events', async (req, res) => {
 // Get all clubs
 app.get('/clubs', async (req, res) => {
     try {
+        const cacheKey = 'clubs:all';
+        const cached = getFromCache<any[]>(cacheKey);
+        if (cached) {
+            return res.json(cached);
+        }
+
         const { data, error } = await supabase
             .from('clubs')
             .select('*')
@@ -44,6 +74,7 @@ app.get('/clubs', async (req, res) => {
             throw error;
         }
 
+        setInCache(cacheKey, data ?? []);
         res.json(data);
     } catch (err: any) {
         console.error('Error fetching clubs:', err);
