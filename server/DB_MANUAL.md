@@ -54,7 +54,7 @@ For operations not covered by the script, use the Supabase Dashboard.
 ### Viewing Data
 - Go to the **Table Editor**.
 - Select `events` to see all scheduled items.
-- Select `clubs` to see registered organizations.
+- Select `clubs` to see registered organizations.   
 
 ### Editing Data Manually
 You can manually edit any field (e.g., fixing a typo in a title, or changing an event type) directly in the Supabase Table Editor.
@@ -65,7 +65,18 @@ You can manually edit any field (e.g., fixing a typo in a title, or changing an 
 - **Delete an Event**: Select the row in Supabase and click "Delete". It will re-appear if it still exists in the ICS feed upon next sync.
 - **Delete a Club**: Deleting a club row will typically cascade delete its events (depending on foreign key settings), or you may need to delete its events first.
 
-## 5. Troubleshooting
+## 5. Collaboration Workflow
+
+The system now supports **Collaborations**, where multiple clubs host a single event.
+
+1.  **Detection**: If `npm run sync-all` finds an event UID that already exists but belongs to a different club, it creates a `collaboration` entry.
+2.  **Status**: New collaborations are created with `status = 'pending'`.
+3.  **Approval**:
+    - An Admin (Root or Club Admin) must approve these.
+    - **Verify/Edit**: Go to the `collaborations` table in Supabase. Change `status` from `'pending'` to `'accepted'`.
+    - Future: This will be handled via an Admin UI.
+
+## 6. Troubleshooting
 
 **"Invalid URL" or Fetch Error**
 - Check that the URL in `clubs.json` is a direct link to an `.ics` file.

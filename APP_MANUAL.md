@@ -65,31 +65,82 @@ The backend is a simple **Express** server that talks to Supabase.
     ```
     *(Note: You can setup `nodemon` later for auto-restart if desired)*
 
-## 4. Deployment
+## 4. Database Setup & Management
 
-### Frontend (Vercel)
-The website is hosted on Vercel.
+### Initial Schema Setup (Migrations)
+The database schema is managed via SQL files in `server/src/db/migrations/`.
+**Manual Action Required**: Run these scripts in your Supabase SQL Editor in order:
+1.  `001_schema_upgrade.sql`: Core schema (Users, Collaborations).
+2.  `002_cleanup_types.sql`: Enforces strict Event Types.
+3.  `003_collab_status.sql`: Adds collaboration approval workflow.
+4.  `004_add_logos.sql`: Adds club logo support.
 
-1.  Push your changes to GitHub.
-2.  **Importing**: When importing the project in Vercel:
-    *   **Root Directory**: Select `web` if asked, OR rely on the `vercel.json` I created in the root.
-    *   **Framework Preset**: Vite.
-3.  **Environment Variables (CRITICAL)**:
-    *   **NEVER** commit `.env` files to GitHub. They are ignored by `.gitignore`.
-    *   In the Vercel Dashboard, go to **Settings > Environment Variables**.
-    *   Add `VITE_API_BASE_URL` with your production backend URL (e.g., `https://my-api.onrender.com`).
-    *   Vercel injects these during the build process.
+### Authentication
+*   **Root Admin**: A default root admin is available for the "Multicultural Center" club.
+    *   Email: `mcc@uoregon.edu`
+    *   Password: `password123` (Dev default, change in production)
+*   **Seeding**: To reset/create this user, run:
+    ```bash
+    npx ts-node src/scripts/seed_auth.ts
+    ```
 
-### Backend (Render / UO Servers)
-The API is hosted separately (currently recommended on Render/Railway).
+### Club Logos
+Images are stored in Supabase Storage and linked via URL.
+1.  Create a Public Bucket named `club-logos` in Supabase.
+2.  Upload images.
+3.  Update the `clubs` table `logo_url` column with the public image link.
 
-1.  Push your changes to GitHub.
-2.  Your host (e.g., Render) should trigger a new build.
-3.  **Environment Variables**:
+### Custom Calendar Subscriptions (ICS)
+The backend now supports generating custom ICS files for specific Club/Type combinations.
+**Endpoint**: `/events/ics`
+**Query Param**: `filters` = Comma-separated list of `CLUB_ID:TYPE_ID` pairs.
+*   **Format**: `?filters=clubId1:typeId1,clubId2:typeId2`
+*   **Example**: `http://localhost:4000/events/ics?filters=123-abc:Events,456-def:Office%20Hours`
+*   **Logic**: Returns events that match (Club1 AND Type1) OR (Club2 AND Type2).
+*   **Note**: If you omit the Type ID (e.g. `clubId:`), it selects ALL events for that club.
+
+## 6. Deployment Guide
+
+### Part A: Backend (Deploy to Render first)
+We deploy the backend first so we have a URL to give to the frontend.
+
+1.  **Create Account**: Go to [render.com](https://render.com) and sign up/login.
+2.  **New Web Service**: Click "New +" and select "Web Service".
+3.  **Connect Repo**: Select your GitHub repository.
+4.  **Configure Settings**:
+    *   **Name**: `mcc-scheduler-backend` (or similar).
+    *   **Root Directory**: `server` (Important! This tells Render to look in the server folder).
+    *   **Environment**: Node.
+    *   **Build Command**: `npm install && npm run build` (Pre-filled usually, but verify).
+    *   **Start Command**: `npm start`.
+5.  **Environment Variables**: Scroll down to "Environment Variables" and add:
     *   `SUPABASE_URL`: Your Supabase URL.
     *   `SUPABASE_KEY`: Your Supabase Service Key.
+6.  **Deploy**: Click "Create Web Service".
+7.  **Copy URL**: Once deployed, copy the URL (e.g., `https://mcc-scheduler.onrender.com`). You need this for Part B.
 
-## 5. Troubleshooting
+### Part B: Frontend (Deploy to Vercel)
+
+1.  **Create Account**: Go to [vercel.com](https://vercel.com).
+2.  **Add New Project**: Click "Add New..." > "Project".
+3.  **Import Repo**: Select your GitHub repository.
+4.  **Configure Project**:
+    *   **Framework Preset**: Vite (should be auto-detected).
+    *   **Root Directory**: Leave as `./` (The `vercel.json` file in your repo handles the rest).
+        *   *Note: If Vercel insists on picking a folder, you can select `web`, but then you must ignore the `vercel.json` advice.*
+5.  **Environment Variables**:
+    *   Expand "Environment Variables".
+    *   Key: `VITE_API_BASE_URL`
+    *   Value: The Render URL you copied in Part A (e.g., `https://mcc-scheduler.onrender.com`).
+6.  **Deploy**: Click "Deploy".
+
+### Part C: Final Verification
+1.  Open your new Vercel URL.
+2.  It should load the App, then fetch data from your Render backend.
+3.  If you see "Network Error" or "Failed to load", check the Console (F12) to see if it's a CORS issue or a 404.
+
+
+## 6. Troubleshooting
 
 **"Failed to load events" on Localhost**
 1.  Is the backend running? Check Terminal 1.
