@@ -22,7 +22,7 @@ export async function populate(clubName: string, icsUrl: string) {
             throw new Error(`Failed to upsert club: ${clubError.message}`);
         }
 
-        console.log(`Club ensured: ${club.id}`);
+        console.log(`Club ensured: ${club.id} (${club.name})`);
 
         // Fetch Event Types for mapping
         const { data: eventTypesData, error: eventTypesError } = await supabase
@@ -31,7 +31,6 @@ export async function populate(clubName: string, icsUrl: string) {
 
         if (eventTypesError) {
             console.error("Error fetching event types:", eventTypesError);
-            // We can continue but types will be null or default
         }
 
         const eventTypeMap: Record<string, string> = {};
@@ -41,19 +40,37 @@ export async function populate(clubName: string, icsUrl: string) {
             });
         }
 
+        const getTypeId = (name: string): string | null => {
+            if (!name) return null;
+            return eventTypeMap[name.toLowerCase()] || null;
+        };
+
         // 2. Fetch and Parse ICS
         const events = await nodeIcal.async.fromURL(icsUrl);
 
         // 3. Process Events
-        const upsertPayload = [];
+        let processedCount = 0;
+        let collabCount = 0;
 
-        // Helpers for simple heuristic classification
+        // Helpers for classification
         const classifyEvent = (title: string, desc: string): string | null => {
             const text = (title + " " + desc).toLowerCase();
-            if (text.includes("office hours")) return eventTypeMap["office hours"];
-            if (text.includes("meeting") || text.includes("weekly")) return eventTypeMap["weekly meeting"];
-            // Default fallback logic could go here, or return null to mean "Other" or "Large Event" based on further rules
-            return eventTypeMap["large event"] || null;
+
+            // Strict Parsing Logic based on Tags
+            // [Event] or [E] -> Events
+            if (text.includes("[event]") || text.includes("[e]")) return getTypeId("Events");
+
+            // [Meeting] or [M] -> Meetings
+            if (text.includes("[meeting]") || text.includes("[m]")) return getTypeId("Meetings");
+
+            // [Office Hours] or [OH] -> Office Hours
+            if (text.includes("[office hours]") || text.includes("[oh]")) return getTypeId("Office Hours");
+
+            // [Other] or [O] -> Other
+            if (text.includes("[other]") || text.includes("[o]")) return getTypeId("Other");
+
+            // Default
+            return getTypeId("Other");
         };
 
         const checkRsvp = (desc: string): { required: boolean, link: string | null } => {
@@ -62,11 +79,9 @@ export async function populate(clubName: string, icsUrl: string) {
             let link = null;
 
             if (required) {
-                // Simple regex to find a URL in the description
                 const urlRegex = /(https?:\/\/[^\s]+)/g;
                 const matches = desc.match(urlRegex);
                 if (matches && matches.length > 0) {
-                    // Heuristic: take the first link found
                     link = matches[0];
                 }
             }
@@ -75,13 +90,13 @@ export async function populate(clubName: string, icsUrl: string) {
 
         for (const key in events) {
             if (events.hasOwnProperty(key)) {
+                // @ts-ignore
                 const event = events[key];
                 if (event.type === 'VEVENT') {
                     // Robust date handling
-                    let start = event.start;
-                    let end = event.end;
+                    const start = event.start;
+                    const end = event.end;
 
-                    // If start/end are undefined, skip or handle appropriately
                     if (!start || !end) {
                         console.warn(`Skipping event ${event.uid} due to missing start/end time`);
                         continue;
@@ -89,45 +104,95 @@ export async function populate(clubName: string, icsUrl: string) {
 
                     const title = event.summary || 'Untitled Event';
                     const description = event.description || '';
-                    const typeId = classifyEvent(title, description);
+                    const location = event.location || '';
+                    const typeId = classifyEvent(title, description); // Apply Strict Classification
                     const rsvpInfo = checkRsvp(description);
+                    const uid = event.uid; // ICS UID
 
-                    upsertPayload.push({
-                        club_id: club.id,
-                        uid: event.uid,
-                        title: title,
-                        description: description,
-                        location: event.location || '',
-                        start_time: start.toISOString(),
-                        end_time: end.toISOString(),
-                        last_updated: new Date().toISOString(),
-                        type_id: typeId,
-                        requires_rsvp: rsvpInfo.required,
-                        rsvp_link: rsvpInfo.link
-                    });
+                    // DUPLICATE & COLLABORATION LOGIC
+
+                    // Check if event with this UID already exists (globally)
+                    // This handles "duplicate events flagged" by UID.
+                    const { data: existingEvents, error: fetchError } = await supabase
+                        .from('events')
+                        .select('id, club_id')
+                        .eq('uid', uid);
+
+                    if (fetchError) {
+                        console.error(`Error checking existence for ${uid}:`, fetchError);
+                        continue;
+                    }
+
+                    const existingEvent = existingEvents && existingEvents.length > 0 ? existingEvents[0] : null;
+
+                    if (existingEvent) {
+                        // Event exists!
+                        if (existingEvent.club_id === club.id) {
+                            // It belongs to THIS club (Primary). Update it.
+                            const { error: updateError } = await supabase
+                                .from('events')
+                                .update({
+                                    title: title,
+                                    description: description,
+                                    location: location,
+                                    start_time: new Date(start).toISOString(),
+                                    end_time: new Date(end).toISOString(),
+                                    last_updated: new Date().toISOString(),
+                                    type_id: typeId,
+                                    requires_rsvp: rsvpInfo.required,
+                                    rsvp_link: rsvpInfo.link
+                                })
+                                .eq('id', existingEvent.id);
+
+                            if (updateError) console.error(`Failed to update event ${uid}:`, updateError);
+                            else processedCount++;
+
+                        } else {
+                            // It belongs to ANOTHER club. This is a COLLABORATION.
+                            // The first club to sync this UID became the Primary.
+                            // We add this current club as a Secondary collaborator.
+                            const { error: collabError } = await supabase
+                                .from('collaborations')
+                                .upsert({
+                                    event_id: existingEvent.id,
+                                    club_id: club.id,
+                                    role: 'secondary',
+                                    status: 'pending' // Admin must approve
+                                }, { onConflict: 'event_id,club_id' });
+
+                            if (collabError) console.error(`Failed to add collaboration for ${uid}:`, collabError);
+                            else collabCount++;
+                        }
+                    } else {
+                        // Event does not exist. Create it (Primary).
+                        // This club becomes the Primary owner because it was synced first.
+                        const { error: insertError } = await supabase
+                            .from('events')
+                            .insert({
+                                club_id: club.id,
+                                uid: uid,
+                                title: title,
+                                description: description,
+                                location: location,
+                                start_time: new Date(start).toISOString(),
+                                end_time: new Date(end).toISOString(),
+                                last_updated: new Date().toISOString(),
+                                type_id: typeId,
+                                requires_rsvp: rsvpInfo.required,
+                                rsvp_link: rsvpInfo.link
+                            });
+
+                        if (insertError) console.error(`Failed to insert event ${uid}:`, insertError);
+                        else processedCount++;
+                    }
                 }
             }
         }
 
-        console.log(`Found ${upsertPayload.length} events.`);
-
-        if (upsertPayload.length > 0) {
-            // Upsert events in batches if needed, but for now single batch is fine for MVP
-            const { error: eventsError } = await supabase
-                .from('events')
-                .upsert(upsertPayload, { onConflict: 'club_id,uid' });
-
-            if (eventsError) {
-                throw new Error(`Failed to upsert events: ${eventsError.message}`);
-            }
-            console.log('Events successfully populated.');
-        } else {
-            console.log('No events to populate.');
-        }
+        console.log(`Process complete. inserted/updated primary: ${processedCount}, collaborations: ${collabCount}`);
 
     } catch (error) {
         console.error('Error running population script:', error);
-        // Don't exit process here so other calls can proceed if imported
         throw error;
     }
 }
