@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: mcc-scheduler-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: node dist/index.js
+    healthCheckPath: /
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SYNC_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: CACHE_TTL_SECONDS
+        value: "120"
+      - key: PORT
+        value: "4000"
+      - key: NODE_ENV
+        value: production

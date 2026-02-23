@@ -5,91 +5,65 @@ import { Input } from './ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useApp } from '../context/AppContext';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 
 export function SubscriptionLinkGenerator() {
-  const { selectedClubs, clubs, events } = useApp();
+  const { selectedClubs, selectedEventTypes, clubs, events, typeIdMap } = useApp();
   const [copied, setCopied] = useState(false);
 
-  const generateICS = () => {
-    if (selectedClubs.length === 0) {
-      return '';
+  const generateICSUrl = (): string => {
+    if (selectedClubs.length === 0) return '';
+
+    const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+
+    // Build filter rules: "clubId:typeId" pairs
+    // If no event types selected → one rule per club (all types)
+    // If event types selected → cross-join clubs × selected type UUIDs
+    let rules: string[];
+
+    if (selectedEventTypes.length === 0) {
+      rules = selectedClubs.map(clubId => `${clubId}:`);
+    } else {
+      rules = [];
+      selectedClubs.forEach(clubId => {
+        selectedEventTypes.forEach(typeName => {
+          const typeId = typeIdMap[typeName];
+          rules.push(typeId ? `${clubId}:${typeId}` : `${clubId}:`);
+        });
+      });
     }
-    
-    // Filter events for selected clubs
-    const filteredEvents = events.filter(event => 
-      selectedClubs.includes(event.clubId)
-    );
 
-    if (filteredEvents.length === 0) {
-      return '';
-    }
-
-    // Format date for ICS (YYYYMMDDTHHMMSS)
-    const formatICSDate = (date: Date) => {
-      return format(date, "yyyyMMdd'T'HHmmss");
-    };
-
-    // Generate ICS content
-    let icsContent = 'BEGIN:VCALENDAR\r\n';
-    icsContent += 'VERSION:2.0\r\n';
-    icsContent += 'PRODID:-//University of Oregon MCC//Event Calendar//EN\r\n';
-    icsContent += 'CALSCALE:GREGORIAN\r\n';
-    icsContent += 'METHOD:PUBLISH\r\n';
-    icsContent += 'X-WR-CALNAME:MCC Events - ' + selectedClubs.map(id => clubs.find(c => c.id === id)?.name).join(', ') + '\r\n';
-    icsContent += 'X-WR-TIMEZONE:America/Los_Angeles\r\n';
-
-    filteredEvents.forEach(event => {
-      const club = clubs.find(c => c.id === event.clubId);
-      
-      icsContent += 'BEGIN:VEVENT\r\n';
-      icsContent += `UID:${event.id}@mcc.uoregon.edu\r\n`;
-      icsContent += `DTSTAMP:${formatICSDate(new Date())}\r\n`;
-      icsContent += `DTSTART:${formatICSDate(event.startTime)}\r\n`;
-      icsContent += `DTEND:${formatICSDate(event.endTime)}\r\n`;
-      icsContent += `SUMMARY:${event.title}\r\n`;
-      icsContent += `DESCRIPTION:${event.description}${club ? ' - ' + club.name : ''}\r\n`;
-      icsContent += `LOCATION:${event.location}\r\n`;
-      icsContent += `CATEGORIES:${event.eventType}\r\n`;
-      if (club) {
-        icsContent += `ORGANIZER;CN=${club.name}:MAILTO:mcc@uoregon.edu\r\n`;
-      }
-      icsContent += 'STATUS:CONFIRMED\r\n';
-      icsContent += 'END:VEVENT\r\n';
-    });
-
-    icsContent += 'END:VCALENDAR\r\n';
-
-    // Create data URI
-    return 'data:text/calendar;charset=utf-8,' + encodeURIComponent(icsContent);
+    return `${baseUrl}/events/ics?filters=${encodeURIComponent(rules.join(','))}`;
   };
 
-  const icsLink = generateICS();
+  const icsUrl = generateICSUrl();
 
-  const copyToClipboard = async () => {
-    if (!icsLink) {
-      toast.error('Please select at least one club to generate calendar link');
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(icsLink);
-      setCopied(true);
-      toast.success('Calendar link copied to clipboard!');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error('Failed to copy link');
-    }
-  };
+  // Count matching events locally so the UI can show how many will be included
+  const filteredCount = events.filter(event => {
+    const clubMatch = selectedClubs.includes(event.clubId);
+    const typeMatch =
+      selectedEventTypes.length === 0 || selectedEventTypes.includes(event.eventType);
+    return clubMatch && typeMatch;
+  }).length;
 
   const selectedClubNames = selectedClubs
     .map(id => clubs.find(c => c.id === id)?.name)
     .filter(Boolean)
     .join(', ');
 
-  const filteredEvents = events.filter(event => 
-    selectedClubs.includes(event.clubId)
-  );
+  const copyToClipboard = async () => {
+    if (!icsUrl) {
+      toast.error('Please select at least one club to generate a calendar link');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(icsUrl);
+      setCopied(true);
+      toast.success('Calendar link copied to clipboard!');
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('Failed to copy link');
+    }
+  };
 
   return (
     <Card>
@@ -107,22 +81,21 @@ export function SubscriptionLinkGenerator() {
           <>
             <div>
               <p className="text-sm text-muted-foreground mb-2">
-                Selected clubs: <span className="font-medium text-foreground">{selectedClubNames}</span>
+                Selected clubs:{' '}
+                <span className="font-medium text-foreground">{selectedClubNames}</span>
               </p>
               <p className="text-sm text-muted-foreground">
-                Events to include: <span className="font-medium text-foreground">{filteredEvents.length}</span>
+                Events to include:{' '}
+                <span className="font-medium text-foreground">{filteredCount}</span>
               </p>
             </div>
             <div className="flex gap-2">
               <Input
-                value={icsLink}
+                value={icsUrl}
                 readOnly
                 className="font-mono text-xs"
               />
-              <Button
-                onClick={copyToClipboard}
-                className="shrink-0"
-              >
+              <Button onClick={copyToClipboard} className="shrink-0">
                 {copied ? (
                   <>
                     <Check className="h-4 w-4 mr-2" />
@@ -139,13 +112,13 @@ export function SubscriptionLinkGenerator() {
             <div className="bg-muted rounded-lg p-4 space-y-2">
               <p className="text-xs font-medium">How to use:</p>
               <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-                <li>Copy the ICS link above</li>
-                <li>Paste it into your browser's address bar</li>
-                <li>Your calendar app will open and ask to import the events</li>
-                <li>Confirm to add all {filteredEvents.length} events to your calendar</li>
+                <li>Copy the calendar link above</li>
+                <li>In Google Calendar: Settings → Add calendar → From URL → paste the link</li>
+                <li>In Apple Calendar: File → New Calendar Subscription → paste the link</li>
+                <li>In Outlook: Add calendar → Subscribe from web → paste the link</li>
               </ol>
               <p className="text-xs text-muted-foreground mt-2">
-                Compatible with: Google Calendar, Apple Calendar, Outlook, and most calendar applications
+                The link stays live — your calendar app will automatically receive new events.
               </p>
             </div>
           </>

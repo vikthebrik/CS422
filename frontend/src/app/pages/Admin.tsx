@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Pencil, Trash2, Plus, Search, Settings, Calendar, MapPin, Clock, Instagram, Link as LinkIcon, Globe } from 'lucide-react';
+import { Pencil, Trash2, Search, Settings, Calendar, MapPin, Clock, Instagram, Link as LinkIcon, Globe } from 'lucide-react';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';
@@ -16,7 +18,18 @@ import { toast } from 'sonner';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 export function Admin() {
-  const { events, clubs, currentUser, addEvent, updateEvent, deleteEvent, updateClub } = useApp();
+  const { events, clubs, currentUser, authToken, updateEvent, deleteEvent, updateClub } = useApp();
+
+  // Helper: authenticated API call
+  const apiCall = (method: string, path: string, body?: object) =>
+    fetch(`${API_BASE}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isManageOrgsModalOpen, setIsManageOrgsModalOpen] = useState(false);
@@ -53,40 +66,62 @@ export function Admin() {
     setIsEditModalOpen(true);
   };
 
-  const handleDelete = (eventId: string) => {
-    if (confirm('Are you sure you want to delete this event?')) {
+  const handleDelete = async (eventId: string) => {
+    if (!confirm('Are you sure you want to delete this event?')) return;
+    try {
+      const res = await apiCall('DELETE', `/events/${eventId}`);
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? 'Failed to delete event');
+        return;
+      }
       deleteEvent(eventId);
-      toast.success('Event deleted successfully');
+      toast.success('Event deleted');
+    } catch {
+      toast.error('Could not reach the server');
     }
   };
 
-  const handleSave = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSave = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (!editingEvent) return;
     const formData = new FormData(e.currentTarget);
-    
+
     const eventData: Partial<Event> = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       location: formData.get('location') as string,
       eventType: formData.get('eventType') as string,
-      clubId: formData.get('clubId') as string,
     };
 
-    if (editingEvent) {
+    try {
+      const res = await apiCall('PATCH', `/events/${editingEvent.id}`, {
+        title: eventData.title,
+        description: eventData.description,
+        location: eventData.location,
+        eventType: eventData.eventType,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? 'Failed to update event');
+        return;
+      }
       updateEvent(editingEvent.id, eventData);
-      toast.success('Event updated successfully');
+      toast.success('Event updated');
+    } catch {
+      toast.error('Could not reach the server');
+      return;
     }
-    
+
     setIsEditModalOpen(false);
     setEditingEvent(null);
   };
 
-  const handleSaveClubInfo = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveClubInfo = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!userClub) return;
-    
     const formData = new FormData(e.currentTarget);
-    
+
     const clubData = {
       description: formData.get('club-description') as string,
       instagram: formData.get('club-instagram') as string,
@@ -94,8 +129,20 @@ export function Admin() {
       engage: formData.get('club-engage') as string,
     };
 
-    updateClub(userClub.id, clubData);
-    toast.success('Club information updated successfully');
+    try {
+      const res = await apiCall('PATCH', `/clubs/${userClub.id}`, clubData);
+      if (!res.ok) {
+        const err = await res.json();
+        toast.error(err.error ?? 'Failed to update club');
+        return;
+      }
+      updateClub(userClub.id, clubData);
+      toast.success('Club information updated');
+    } catch {
+      toast.error('Could not reach the server');
+      return;
+    }
+
     setIsEditClubModalOpen(false);
   };
 

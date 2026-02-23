@@ -1,4 +1,7 @@
 import { useState, useEffect } from 'react';
+import type { Session } from '@supabase/supabase-js';
+import { supabase } from './supabase';
+import { LoginForm } from './components/LoginForm';
 
 // Define event interface
 interface Event {
@@ -26,12 +29,29 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Auth State
+  const [session, setSession] = useState<Session | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+
   // UI State
   const [activeTab, setActiveTab] = useState<'events' | 'roster'>('events');
   const [selectedClubId, setSelectedClubId] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000';
+
+  // Initialize auth session and subscribe to changes
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -76,26 +96,47 @@ function App() {
   const getClubName = (id: string) => clubs.find(c => c.id === id)?.name || 'Unknown Club';
 
   return (
+    <>
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
       {/* Navbar / Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <h1 className="text-2xl font-bold text-indigo-600 tracking-tight">MCC Scheduler</h1>
-            <nav className="flex space-x-4">
-              <button
-                onClick={() => setActiveTab('events')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'events' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
-              >
-                Events
-              </button>
-              <button
-                onClick={() => setActiveTab('roster')}
-                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'roster' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
-              >
-                Club Roster
-              </button>
-            </nav>
+            <div className="flex items-center gap-2">
+              <nav className="flex space-x-1">
+                <button
+                  onClick={() => setActiveTab('events')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'events' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+                >
+                  Events
+                </button>
+                <button
+                  onClick={() => setActiveTab('roster')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium transition-colors ${activeTab === 'roster' ? 'bg-indigo-100 text-indigo-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'}`}
+                >
+                  Club Roster
+                </button>
+              </nav>
+              {session ? (
+                <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-200">
+                  <span className="text-xs text-gray-500 hidden sm:block">{session.user.email}</span>
+                  <button
+                    onClick={() => supabase.auth.signOut()}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowLogin(true)}
+                  className="ml-4 px-3 py-1.5 text-sm font-medium text-indigo-600 border border-indigo-300 rounded-md hover:bg-indigo-50 transition-colors"
+                >
+                  Admin Login
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -224,6 +265,8 @@ function App() {
         )}
       </main>
     </div>
+      {showLogin && <LoginForm onClose={() => setShowLogin(false)} />}
+    </>
   );
 }
 

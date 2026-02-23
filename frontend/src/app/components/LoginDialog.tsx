@@ -4,8 +4,9 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useApp } from '../context/AppContext';
-import { users } from '../data/mockData';
 import { toast } from 'sonner';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 
 interface LoginDialogProps {
   open: boolean;
@@ -13,30 +14,38 @@ interface LoginDialogProps {
 }
 
 export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
-  const { setCurrentUser } = useApp();
-  const [username, setUsername] = useState('');
+  const { setCurrentUser, setAuthToken } = useApp();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
 
-    // Check credentials
-    if (username === 'mcc@uoregon.edu' && password === 'upperadmin') {
-      setCurrentUser(users[0]); // Admin user
-      toast.success('Logged in as Upper Admin');
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error ?? 'Login failed');
+        return;
+      }
+
+      setCurrentUser(data.user);
+      setAuthToken(data.token);
+      toast.success(`Logged in as ${data.user.name}`);
       onOpenChange(false);
-      setUsername('');
+      setEmail('');
       setPassword('');
-    } else if (username === 'bsu@uoregon.edu' && password === 'clubadmin') {
-      setCurrentUser(users[1]); // Club officer - update to BSU
-      const bsuOfficer = { ...users[1], clubId: 'bsu', name: 'BSU President' };
-      setCurrentUser(bsuOfficer);
-      toast.success('Logged in as BSU Club Admin');
-      onOpenChange(false);
-      setUsername('');
-      setPassword('');
-    } else {
-      toast.error('Invalid username or password');
+    } catch {
+      toast.error('Could not reach the server. Is it running?');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,14 +60,15 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
         </DialogHeader>
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <Label htmlFor="username">Email / Username</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="email@uoregon.edu"
+              id="email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@uoregon.edu"
               required
+              autoComplete="email"
             />
           </div>
           <div>
@@ -67,25 +77,29 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
               id="password"
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={e => setPassword(e.target.value)}
               placeholder="Enter your password"
               required
+              autoComplete="current-password"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={loading}
+            >
               Cancel
             </Button>
-            <Button type="submit" className="bg-primary">
-              Sign In
+            <Button type="submit" className="bg-primary" disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign In'}
             </Button>
           </div>
         </form>
-        <div className="text-xs text-muted-foreground border-t pt-4">
-          <p className="mb-1">Demo credentials:</p>
-          <p>Upper Admin: mcc@uoregon.edu / upperadmin</p>
-          <p>Club Admin: bsu@uoregon.edu / clubadmin</p>
-        </div>
+        <p className="text-xs text-muted-foreground border-t pt-4">
+          Admin accounts are managed by the MCC root administrator.
+        </p>
       </DialogContent>
     </Dialog>
   );

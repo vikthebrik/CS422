@@ -7,7 +7,7 @@ import { Event } from '../types';
 import { useApp } from '../context/AppContext';
 
 export function Dashboard() {
-  const { events, selectedClubs, selectedEventTypes } = useApp();
+  const { events, selectedClubs, selectedEventTypes, loading, error } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -29,6 +29,28 @@ export function Dashboard() {
     setSelectedEvent(event);
     setIsModalOpen(true);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 border-2 border-current border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-sm">Loading events…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-24 text-destructive">
+        <div className="text-center space-y-2">
+          <p className="font-medium">Failed to load data</p>
+          <p className="text-sm text-muted-foreground">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

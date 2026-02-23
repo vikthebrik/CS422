@@ -88,6 +88,8 @@ export async function populate(clubName: string, icsUrl: string) {
             return { required, link };
         };
 
+        const processedUids: string[] = [];
+
         for (const key in events) {
             if (events.hasOwnProperty(key)) {
                 // @ts-ignore
@@ -108,6 +110,8 @@ export async function populate(clubName: string, icsUrl: string) {
                     const typeId = classifyEvent(title, description); // Apply Strict Classification
                     const rsvpInfo = checkRsvp(description);
                     const uid = event.uid; // ICS UID
+
+                    processedUids.push(uid);
 
                     // DUPLICATE & COLLABORATION LOGIC
 
@@ -187,6 +191,41 @@ export async function populate(clubName: string, icsUrl: string) {
                     }
                 }
             }
+        }
+
+        // 4. PRUNING: Remove events that are in DB for this club but NOT in the valid ICS feed
+        // Only run this if we actually processed some events to avoid wiping DB on network error
+        // But if processedCount is 0, it might mean the calendar is truly empty.
+        // Let's rely on processedUids array.
+
+        console.log(`Pruning Check: Found ${processedUids.length} events in feed.`);
+
+        if (processedUids.length > 0) {
+            const { data: dbEvents } = await supabase
+                .from('events')
+                .select('id, uid')
+                .eq('club_id', club.id);
+
+            if (dbEvents) {
+                const uidsToDelete = dbEvents
+                    .filter(e => !processedUids.includes(e.uid))
+                    .map(e => e.id);
+
+                if (uidsToDelete.length > 0) {
+                    console.log(`Pruning ${uidsToDelete.length} stale events...`);
+                    const { error: delErr } = await supabase
+                        .from('events')
+                        .delete()
+                        .in('id', uidsToDelete);
+
+                    if (delErr) console.error("Pruning failed:", delErr);
+                    else console.log("Pruning complete.");
+                } else {
+                    console.log("No stale events to prune.");
+                }
+            }
+        } else {
+            console.log("Feed is empty. To be safe, skipping auto-prune to avoid accidental wipe. If you intend to clear all, use manual deletion.");
         }
 
         console.log(`Process complete. inserted/updated primary: ${processedCount}, collaborations: ${collabCount}`);

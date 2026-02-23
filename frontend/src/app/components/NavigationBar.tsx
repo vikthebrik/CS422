@@ -10,11 +10,12 @@ interface NavigationBarProps {
 }
 
 export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
-  const { currentUser, setCurrentUser } = useApp();
+  const { currentUser, setCurrentUser, setAuthToken } = useApp();
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const handleSignOut = () => {
     setCurrentUser(null);
+    setAuthToken(null);
     toast.success('Signed out successfully');
   };
 
