@@ -1,34 +1,37 @@
-# CS422
+# CS422: MCC Scheduler
 
-Repo contains the course project and other material for CS422: Software Engineering (University of Oregon, Winter 2026).
+Web-based calendar hub that aggregates Multicultural Center (MCC) student organization schedules and provides custom ICS subscription links.
 
-## MCC Scheduler
+## Monorepo Layout
 
-Web-based calendar hub that aggregates MCC student organization schedules and provides custom ICS subscription links. See [plans/MCC-Scheduler-Plan.md](plans/MCC-Scheduler-Plan.md) for architecture and milestones.
+- **`frontend/`** — React SPA (Vite + Tailwind). Deploy to Vercel.
+- **`server/`** — Express API (events, subscriptions, admin sync worker). Deploy to Render.
 
-### Monorepo layout
+## Quick Start (Local Development)
 
-- **`server/`** — Express API (events, subscriptions, admin). Deploy to Render.
-- **`web/`** — React SPA (Vite + Tailwind). Deploy to Vercel.
+### 1. Database Setup
+Ensure you have a local or hosted Supabase PostgreSQL instance running. Ensure migrations `001_schema_upgrade.sql` through `005_enable_auth.sql` (found in `server/src/db/migrations/`) have been executed in your SQL editor.
 
-### Run locally
+### 2. Run the Backend API
+```bash
+cd server
+npm install
+npm run dev
+```
+*(Requires `SUPABASE_URL`, `SUPABASE_KEY`, `SYNC_SECRET`, and `ALLOWED_ORIGINS` in `server/.env`)*
 
-1. **Backend** (default port 4000):
+### 3. Run the Frontend UI
+**Open a second terminal:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+*(Requires `VITE_API_BASE_URL=http://localhost:4000` in `frontend/.env`)*
 
-   ```bash
-   cd server
-   npm install
-   cp .env.example .env   # optional: set DATABASE_URL, CORS_ORIGIN
-   npm start
-   ```
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-2. **Frontend** (default port 5173):
+## Documentation
 
-   ```bash
-   cd web
-   npm install
-   cp .env.example .env.local   # optional: set VITE_API_BASE_URL=http://localhost:4000
-   npm run dev
-   ```
-
-   Open http://localhost:5173. The app will call the backend `/health` endpoint; ensure the server is running to see "API: ok".
+- **Development Guide**: See [`CLAUDE.md`](CLAUDE.md) for full architecture details, database schema, authentication flows, and automated sync script instructions. 
+- **Deployment Guide**: See [`plans/deployment-guide.md`](plans/deployment-guide.md) for step-by-step instructions on deploying the full stack to Render, Vercel, and GitHub Actions.

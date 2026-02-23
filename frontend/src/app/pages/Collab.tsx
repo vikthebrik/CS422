@@ -8,7 +8,6 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
-import { collabEvents } from '../data/mockData';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router';
@@ -24,14 +23,13 @@ export function Collab() {
   const isClubAdmin = currentUser?.role === 'club_officer';
 
   // Filter collaborations based on user role
+  // TODO: Replace with backend integration when collaborations API is ready
   const relevantCollabs = useMemo(() => {
     if (isUpperAdmin) {
-      // Upper admin sees only center-level collaborations
-      return collabEvents.filter(e => e.type === 'center');
+      return ([] as any[]).filter(e => e.type === 'center');
     } else if (isClubAdmin && currentUser?.clubId) {
-      // Club admin sees only club collaborations involving their club
-      return collabEvents.filter(e => 
-        e.type === 'club' && 
+      return ([] as any[]).filter(e =>
+        e.type === 'club' &&
         (e.proposedBy === currentUser.clubId || e.partnerClubs.includes(currentUser.clubId))
       );
     }
