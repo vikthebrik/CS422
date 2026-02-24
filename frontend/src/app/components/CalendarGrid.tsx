@@ -43,15 +43,17 @@ interface CalendarState {
   view: CalendarView;
 }
 
+const isMobile = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
 export function CalendarGrid({
   events,
   onEventClick,
 }: CalendarGridProps) {
-  const [currentDate, setCurrentDate] = useState(
-    new Date(2026, 1, 1),
-  );
-  const [view, setView] = useState<CalendarView>('month');
-  const [history, setHistory] = useState<CalendarState[]>([{ date: new Date(2026, 1, 1), view: 'month' }]);
+  const today = new Date();
+  const defaultView: CalendarView = isMobile() ? 'day' : 'month';
+  const [currentDate, setCurrentDate] = useState(today);
+  const [view, setView] = useState<CalendarView>(defaultView);
+  const [history, setHistory] = useState<CalendarState[]>([{ date: today, view: defaultView }]);
   const [historyIndex, setHistoryIndex] = useState(0);
   const { clubs } = useApp();
   const navigate = useNavigate();

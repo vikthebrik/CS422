@@ -80,6 +80,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { setClubs(apiClubs); }, [apiClubs]);
   useEffect(() => { setEvents(apiEvents); }, [apiEvents]);
 
+  // Default to all clubs selected when clubs load (desktop/laptop: avoid "no events" + button)
+  useEffect(() => {
+    if (apiClubs.length > 0 && selectedClubs.length === 0) {
+      setSelectedClubs(apiClubs.map((c) => c.id));
+    }
+  }, [apiClubs, selectedClubs.length]);
+
   const addEvent = (event: Event) => setEvents(prev => [...prev, event]);
 
   const updateEvent = (id: string, updated: Partial<Event>) =>

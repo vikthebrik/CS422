@@ -1,4 +1,5 @@
 import { Calendar, Menu, LogOut } from 'lucide-react';
+import { Link } from 'react-router';
 import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';
 import { useState } from 'react';
@@ -32,7 +33,10 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
+            <Link
+              to="/"
+              className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
               <div className="bg-primary text-primary-foreground rounded-lg p-2">
                 <Calendar className="h-5 w-5" />
               </div>
@@ -42,7 +46,7 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
                   University of Oregon Multicultural Center
                 </p>
               </div>
-            </div>
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             {currentUser && (
