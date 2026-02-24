@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { Event, Club, User } from '../types';
 import { useClubs } from '../hooks/useClubs';
 import { useEvents } from '../hooks/useEvents';
@@ -80,12 +80,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { setClubs(apiClubs); }, [apiClubs]);
   useEffect(() => { setEvents(apiEvents); }, [apiEvents]);
 
-  // Default to all clubs selected when clubs load (desktop/laptop: avoid "no events" + button)
+  // Default to all clubs selected only on initial load (not when user clicks "Deselect All")
+  const initialLoadDone = useRef(false);
   useEffect(() => {
-    if (apiClubs.length > 0 && selectedClubs.length === 0) {
+    if (apiClubs.length > 0 && !initialLoadDone.current) {
+      initialLoadDone.current = true;
       setSelectedClubs(apiClubs.map((c) => c.id));
     }
-  }, [apiClubs, selectedClubs.length]);
+  }, [apiClubs]);
 
   const addEvent = (event: Event) => setEvents(prev => [...prev, event]);
 
