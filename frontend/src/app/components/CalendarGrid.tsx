@@ -170,7 +170,7 @@ export function CalendarGrid({
   };
 
   return (
-    <div className="bg-card rounded-lg border border-border">
+    <div className="bg-card rounded-lg border border-border overflow-x-hidden min-w-0">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -194,7 +194,7 @@ export function CalendarGrid({
             >
               <ArrowRightIcon className="h-4 w-4" />
             </Button>
-            <h2 className="text-xl font-semibold">{getDisplayTitle()}</h2>
+            <h2 className="text-xl font-semibold min-w-0 break-words">{getDisplayTitle()}</h2>
           </div>
           
           <div className="flex flex-wrap items-center gap-2">
@@ -255,7 +255,7 @@ export function CalendarGrid({
       </div>
 
       {/* Calendar Grid */}
-      <div className="p-4">
+      <div className="p-4 min-w-0 overflow-x-hidden">
         {view === 'month' && (
           <>
             {/* Weekday Headers */}
@@ -486,9 +486,9 @@ export function CalendarGrid({
         {view === 'day' && (
           <>
             {/* Day View - List of Events */}
-            <div className="space-y-3">
-              <div className="text-center pb-4 border-b border-border">
-                <div className="text-2xl font-semibold">
+            <div className="space-y-3 min-w-0">
+              <div className="text-center pb-4 border-b border-border overflow-hidden">
+                <div className="text-2xl font-semibold break-words">
                   {format(currentDate, 'EEEE')}
                 </div>
                 <div className="text-4xl font-bold text-primary">
@@ -501,7 +501,7 @@ export function CalendarGrid({
                   No events scheduled for this day
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-3 min-w-0">
                   {getEventsForDay(currentDate)
                     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
                     .map((event) => {
@@ -512,36 +512,36 @@ export function CalendarGrid({
                         <button
                           key={event.id}
                           onClick={() => navigate(`/event/${event.id}`)}
-                          className="w-full text-left p-4 rounded-lg border-2 hover:bg-accent/50 transition-colors"
+                          className="w-full text-left p-4 rounded-lg border-2 hover:bg-accent/50 transition-colors min-w-0 overflow-hidden"
                           style={{
                             borderColor: event.color,
                           }}
                         >
-                          <div className="flex items-start gap-4">
+                          <div className="flex items-start gap-3 min-w-0">
                             <div 
-                              className="w-2 h-full rounded-full"
+                              className="w-2 shrink-0 h-full rounded-full"
                               style={{ backgroundColor: event.color }}
                             />
-                            <div className="flex-1 space-y-2">
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <h3 className="font-semibold text-lg">
+                            <div className="flex-1 min-w-0 space-y-2 overflow-hidden">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-4">
+                                <div className="min-w-0">
+                                  <h3 className="font-semibold text-lg break-words">
                                     {event.title}
                                   </h3>
                                   {club && (
-                                    <p className="text-sm" style={{ color: event.color }}>
+                                    <p className="text-sm break-words" style={{ color: event.color }}>
                                       {club.name}
                                     </p>
                                   )}
                                 </div>
-                                <div className="text-right text-sm text-muted-foreground shrink-0">
+                                <div className="text-sm text-muted-foreground shrink-0">
                                   {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
                                 </div>
                               </div>
-                              <p className="text-sm text-muted-foreground">
+                              <p className="text-sm text-muted-foreground break-words">
                                 {event.description}
                               </p>
-                              <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground break-words">
                                 <span>📍 {event.location}</span>
                                 <span>• {event.eventType}</span>
                               </div>

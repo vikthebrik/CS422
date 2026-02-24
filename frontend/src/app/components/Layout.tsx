@@ -37,8 +37,8 @@ export function Layout() {
       <div className="flex flex-1">
         <FilterSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
         
-        <main className="flex-1 overflow-auto">
-          <div className="max-w-[1200px] mx-auto p-4 sm:p-6 lg:p-8">
+        <main className="flex-1 overflow-auto min-w-0">
+          <div className="max-w-[1200px] mx-auto p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
             {/* Tab Navigation */}
             {visibleNavigation.length > 1 && (
               <div className="mb-6 border-b border-border">
