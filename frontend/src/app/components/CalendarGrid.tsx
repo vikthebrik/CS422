@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, ArrowLeft as ArrowLeftIcon, ArrowRight as ArrowRightIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { Event } from "../types";
 import {
@@ -175,25 +175,6 @@ export function CalendarGrid({
       <div className="p-4 border-b border-border">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            {/* Back/Forward History Navigation */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goBack}
-              disabled={historyIndex === 0}
-              title="Go back"
-            >
-              <ArrowLeftIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={goForward}
-              disabled={historyIndex === history.length - 1}
-              title="Go forward"
-            >
-              <ArrowRightIcon className="h-4 w-4" />
-            </Button>
             <h2 className="text-xl font-semibold min-w-0 break-words">{getDisplayTitle()}</h2>
           </div>
           
