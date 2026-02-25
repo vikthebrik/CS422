@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
+import { getUpcomingClubEvents } from '../constants';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -20,9 +21,7 @@ export function ClubPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const club = clubs.find(c => c.id === clubId);
-  const clubEvents = events.filter(e => e.clubId === clubId).sort((a, b) => 
-    a.startTime.getTime() - b.startTime.getTime()
-  );
+  const clubEvents = clubId ? getUpcomingClubEvents(events, clubId) : [];
 
   const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === clubId);
 

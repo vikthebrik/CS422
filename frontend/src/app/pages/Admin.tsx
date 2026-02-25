@@ -12,6 +12,7 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { Textarea } from '../components/ui/textarea';
 import { useApp } from '../context/AppContext';
+import { getUpcomingClubEvents } from '../constants';
 import { Event, EVENT_TYPES } from '../types';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -54,12 +55,8 @@ export function Admin() {
     event.description.toLowerCase().includes(searchTerm.toLowerCase())
   ).sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
-  // Get club events for club admin
-  const clubEvents = userClub 
-    ? events.filter(e => e.clubId === userClub.id).sort((a, b) => 
-        a.startTime.getTime() - b.startTime.getTime()
-      )
-    : [];
+  // Get club events for club admin (upcoming only, ascending, limited)
+  const clubEvents = userClub ? getUpcomingClubEvents(events, userClub.id) : [];
 
   const handleEdit = (event: Event) => {
     setEditingEvent(event);
