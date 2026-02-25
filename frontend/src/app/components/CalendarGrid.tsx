@@ -324,12 +324,19 @@ export function CalendarGrid({
                                       {club.name}
                                     </p>
                                   )}
-                                  <p className="text-xs text-white">
-                                    {event.description}
+                                  <p className="font-medium text-white">
+                                    {event.title}
                                   </p>
-                                  <p className="text-xs text-white">
-                                    📍 {event.location}
-                                  </p>
+                                  {event.description && (
+                                    <p className="text-xs text-white">
+                                      {event.description}
+                                    </p>
+                                  )}
+                                  {event.location && (
+                                    <p className="text-xs text-white">
+                                      📍 {event.location}
+                                    </p>
+                                  )}
                                   <p className="text-xs text-white">
                                     🕐{" "}
                                     {format(
@@ -437,12 +444,16 @@ export function CalendarGrid({
                                     <p className="font-medium text-white">
                                       {event.title}
                                     </p>
-                                    <p className="text-xs text-white">
-                                      {event.description}
-                                    </p>
-                                    <p className="text-xs text-white">
-                                      📍 {event.location}
-                                    </p>
+                                    {event.description && (
+                                      <p className="text-xs text-white">
+                                        {event.description}
+                                      </p>
+                                    )}
+                                    {event.location && (
+                                      <p className="text-xs text-white">
+                                        📍 {event.location}
+                                      </p>
+                                    )}
                                     <p className="text-xs text-white">
                                       🕐{" "}
                                       {format(event.startTime, "h:mm a")}{" "}

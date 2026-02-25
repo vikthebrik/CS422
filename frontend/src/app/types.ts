@@ -43,8 +43,8 @@ export interface CollabEvent {
 }
 
 export const EVENT_TYPES = [
-  'Event',
-  'Meeting',
+  'Events',
+  'Meetings',
   'Office Hours',
   'Other'
 ] as const;
