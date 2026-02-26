@@ -8,6 +8,9 @@ import { ClubRoster } from './pages/ClubRoster';
 import { ClubPage } from './pages/ClubPage';
 import { EventPage } from './pages/EventPage';
 import { PasswordManagement } from './pages/PasswordManagement';
+import { ForgotPassword } from './pages/ForgotPassword';
+import { ResetPassword } from './pages/ResetPassword';
+import { RequestAccount } from './pages/RequestAccount';
 
 const router = createBrowserRouter([
   {
@@ -41,6 +44,18 @@ const router = createBrowserRouter([
       {
         path: "passwords",
         Component: PasswordManagement,
+      },
+      {
+        path: "forgot-password",
+        Component: ForgotPassword,
+      },
+      {
+        path: "reset-password",
+        Component: ResetPassword,
+      },
+      {
+        path: "request-account",
+        Component: RequestAccount,
       },
     ],
   },

@@ -1,64 +1,104 @@
+/**
+ * seed_auth.ts
+ *
+ * Creates Supabase Auth accounts for the MCC root admin and every club in the
+ * clubs table, then inserts the corresponding user_roles rows.
+ *
+ * Usage:
+ *   cd server
+ *   npx ts-node -r tsconfig-paths/register src/scripts/seed_auth.ts
+ *
+ * Idempotent: skips users whose email already exists in auth.users.
+ */
 
-import { supabase } from '../db/supabase';
-import bcrypt from 'bcrypt';
 import path from 'path';
 import dotenv from 'dotenv';
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const SALT_ROUNDS = 10;
+import { supabase } from '../db/supabase';
 
-async function seedAuth() {
-    console.log("--- Seeding Authentication Data ---");
+const ROOT_EMAIL = 'mcc@uoregon.edu';
+const ROOT_PASSWORD = 'password123';
+const DEFAULT_CLUB_PASSWORD = 'clubadmin123';
 
-    // 1. Ensure Multicultural Center Club Exists
-    const mccName = "Multicultural Center";
-    // Placeholder ICS if not provided, or real one if user has it.
-    // Using a dummy one for now if creating new.
-    const mccIcs = "https://example.com/mcc.ics";
+async function createAuthUser(email: string, password: string, name: string) {
+  const { data, error } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true, // skip email verification
+    user_metadata: { name },
+  });
 
-    console.log(`Ensuring club: ${mccName}`);
-    const { data: mccClub, error: clubError } = await supabase
-        .from('clubs')
-        .upsert({ name: mccName, ics_source_url: mccIcs }, { onConflict: 'name' })
-        .select('id, name')
-        .single();
-
-    if (clubError) {
-        console.error("Failed to upsert MCC club:", clubError);
-        return;
+  if (error) {
+    // "User already registered" is not fatal — retrieve the existing user
+    if (error.message?.includes('already')) {
+      const { data: { users }, error: listError } = await supabase.auth.admin.listUsers();
+      if (listError) throw listError;
+      const existing = users.find(u => u.email === email);
+      if (existing) return existing;
     }
-    console.log(`MCC Club ID: ${mccClub.id}`);
+    throw error;
+  }
 
-    // 2. Create Root Admin User
-    const rootEmail = "mcc@uoregon.edu"; // Default placeholder
-    const rootPassword = "password123"; // Default for development
-
-    const passwordHash = await bcrypt.hash(rootPassword, SALT_ROUNDS);
-
-    console.log(`Creating Root Admin: ${rootEmail}`);
-
-    // Check if user exists to avoid duplicate key error or just upsert
-    // But our users table schema: id, email unique, password_hash, role, club_id
-    const { data: user, error: userError } = await supabase
-        .from('users')
-        .upsert({
-            email: rootEmail,
-            password_hash: passwordHash,
-            role: 'root_admin',
-            club_id: mccClub.id // Linked to MCC
-        }, { onConflict: 'email' })
-        .select()
-        .single();
-
-    if (userError) {
-        console.error("Failed to seed root user:", userError);
-        return;
-    }
-
-    console.log("Root Admin successfully seeded.");
-    console.log(`Email: ${rootEmail}`);
-    console.log(`Password: ${rootPassword}`);
-    console.log("--- Done ---");
+  return data.user;
 }
 
-seedAuth().catch(console.error);
+async function seedAuth() {
+  console.log('--- Seeding Authentication Data ---');
+
+  // ── 1. Root admin ─────────────────────────────────────────────────────────
+  console.log(`\nCreating root admin: ${ROOT_EMAIL}`);
+  const rootUser = await createAuthUser(ROOT_EMAIL, ROOT_PASSWORD, 'MCC Admin');
+
+  const { error: rootRoleError } = await supabase
+    .from('user_roles')
+    .upsert(
+      { user_id: rootUser.id, email: ROOT_EMAIL, role: 'root', club_id: null },
+      { onConflict: 'user_id' }
+    );
+  if (rootRoleError) console.error('  ✗ Failed to upsert root user_role:', rootRoleError);
+  else console.log(`  ✓ Root admin provisioned (id: ${rootUser.id})`);
+
+  // ── 2. Club admins ────────────────────────────────────────────────────────
+  const { data: clubs, error: clubsError } = await supabase
+    .from('clubs')
+    .select('id, name')
+    .order('name', { ascending: true });
+
+  if (clubsError) throw clubsError;
+  console.log(`\nProvisioning accounts for ${clubs.length} clubs…`);
+
+  for (const club of clubs) {
+    // Derive a deterministic email from the club name:
+    //   "Black Student Union" → "bsu@uoregon.edu" (first letters of each word, lower-cased)
+    const slug = club.name
+      .split(/\s+/)
+      .map((w: string) => w[0])
+      .join('')
+      .toLowerCase();
+    const email = `${slug}@uoregon.edu`;
+
+    try {
+      const clubUser = await createAuthUser(email, DEFAULT_CLUB_PASSWORD, club.name);
+      const { error: clubRoleError } = await supabase
+        .from('user_roles')
+        .upsert(
+          { user_id: clubUser.id, email, role: 'club_admin', club_id: club.id },
+          { onConflict: 'user_id' }
+        );
+      if (clubRoleError) console.error(`  ✗ user_role upsert failed for ${club.name}:`, clubRoleError);
+      else console.log(`  ✓ ${club.name.padEnd(40)} ${email}`);
+    } catch (err: any) {
+      console.error(`  ✗ ${club.name}: ${err.message}`);
+    }
+  }
+
+  console.log('\n--- Done ---');
+  console.log(`Root admin:  ${ROOT_EMAIL} / ${ROOT_PASSWORD}`);
+  console.log(`Club admins: <slug>@uoregon.edu / ${DEFAULT_CLUB_PASSWORD}`);
+}
+
+seedAuth().catch(err => {
+  console.error('Seed failed:', err);
+  process.exit(1);
+});

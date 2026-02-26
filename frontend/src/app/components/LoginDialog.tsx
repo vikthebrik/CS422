@@ -1,10 +1,13 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useApp } from '../context/AppContext';
 import { toast } from 'sonner';
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 
@@ -15,12 +18,17 @@ interface LoginDialogProps {
 
 export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const { setCurrentUser, setAuthToken } = useApp();
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!EMAIL_REGEX.test(email)) {
+      toast.error('Please enter a valid email address');
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -97,9 +105,22 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
             </Button>
           </div>
         </form>
-        <p className="text-xs text-muted-foreground border-t pt-4">
-          Admin accounts are managed by the MCC root administrator.
-        </p>
+        <div className="border-t pt-4 flex flex-col gap-1">
+          <button
+            type="button"
+            className="text-xs text-primary underline underline-offset-4 text-left"
+            onClick={() => { onOpenChange(false); navigate('/forgot-password'); }}
+          >
+            Forgot your password?
+          </button>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline underline-offset-4 text-left"
+            onClick={() => { onOpenChange(false); navigate('/request-account'); }}
+          >
+            Don't have an account? Request one
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );

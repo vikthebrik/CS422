@@ -13,6 +13,8 @@ interface AppContextType {
   authToken: string | null;
   selectedClubs: string[];
   selectedEventTypes: string[];
+  /** Live event type names fetched from /event-types */
+  eventTypeNames: string[];
   /** Maps event type name → type UUID — used for ICS URL construction */
   typeIdMap: Record<string, string>;
   loading: boolean;
@@ -42,6 +44,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
+  const [eventTypeNames, setEventTypeNames] = useState<string[]>([]);
 
   // Token persisted to localStorage so admins stay logged in across page reloads
   const [authToken, setAuthTokenState] = useState<string | null>(
@@ -89,6 +92,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [apiClubs]);
 
+  // Fetch live event types and default-select all on first load
+  const eventTypesLoadDone = useRef(false);
+  useEffect(() => {
+    fetch(`${API_BASE}/event-types`)
+      .then(r => r.ok ? r.json() : [])
+      .then((data: { id: string; name: string }[]) => {
+        const names = data.map(et => et.name);
+        setEventTypeNames(names);
+        if (!eventTypesLoadDone.current && names.length > 0) {
+          eventTypesLoadDone.current = true;
+          setSelectedEventTypes(names);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const addEvent = (event: Event) => setEvents(prev => [...prev, event]);
 
   const updateEvent = (id: string, updated: Partial<Event>) =>
@@ -114,6 +133,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         authToken,
         selectedClubs,
         selectedEventTypes,
+        eventTypeNames,
         typeIdMap,
         loading,
         error,

@@ -15,6 +15,7 @@ function getClubColor(index: number): string {
 interface ApiClub {
   id: string;
   name: string;
+  org_type: 'union' | 'department' | null;
   logo_url: string | null;
   ics_source_url: string | null;
   social_links: {
@@ -32,6 +33,7 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
   return {
     id: apiClub.id,
     name: apiClub.name,
+    orgType: apiClub.org_type ?? 'union',
     color: apiClub.metadata_tags?.color ?? getClubColor(index),
     logo: apiClub.logo_url ?? undefined,
     outlookLink: apiClub.ics_source_url ?? undefined,

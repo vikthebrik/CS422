@@ -78,7 +78,12 @@ export function ClubPage() {
             <div className="flex-1">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <CardTitle className="text-3xl mb-2">{club.name}</CardTitle>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CardTitle className="text-3xl">{club.name}</CardTitle>
+                    <Badge variant="secondary">
+                      {club.orgType === 'department' ? 'Department' : 'Union'}
+                    </Badge>
+                  </div>
                   <CardDescription className="text-base">
                     {club.description || 'Student organization at the University of Oregon'}
                   </CardDescription>
@@ -171,7 +176,7 @@ export function ClubPage() {
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1">
                           <Clock className="h-3 w-3" />
-                          {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
+                          {format(event.startTime, 'MMM d, yyyy')} · {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
                         </span>
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />

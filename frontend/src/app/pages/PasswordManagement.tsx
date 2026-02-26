@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Key, Pencil, Save, X } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Key, Save, X, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -8,49 +8,64 @@ import { useApp } from '../context/AppContext';
 import { toast } from 'sonner';
 import { Badge } from '../components/ui/badge';
 
-interface ClubCredential {
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+
+interface ClubAdminUser {
+  id: string;
+  email: string;
   clubId: string;
   clubName: string;
-  username: string;
-  password: string;
 }
 
 export function PasswordManagement() {
-  const { clubs } = useApp();
-  
-  // Mock credentials storage - in real app this would be in secure backend
-  const [credentials, setCredentials] = useState<ClubCredential[]>([
-    { clubId: 'bsu', clubName: 'BSU', username: 'bsu@uoregon.edu', password: 'clubadmin' },
-    { clubId: 'saca', clubName: 'SACA', username: 'saca@uoregon.edu', password: 'saca2024' },
-    { clubId: 'msa', clubName: 'MSA', username: 'msa@uoregon.edu', password: 'msa2024' },
-    { clubId: 'vsa', clubName: 'VSA', username: 'vsa@uoregon.edu', password: 'vsa2024' },
-    { clubId: 'lsu', clubName: 'LSU', username: 'lsu@uoregon.edu', password: 'lsu2024' },
-    { clubId: 'aasu', clubName: 'AASU', username: 'aasu@uoregon.edu', password: 'aasu2024' },
-  ]);
+  const { clubs, authToken } = useApp();
+  const [users, setUsers] = useState<ClubAdminUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [resettingId, setResettingId] = useState<string | null>(null);
+  const [newPasswordForm, setNewPasswordForm] = useState<Record<string, string>>({});
 
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ username: '', password: '' });
+  const apiCall = useCallback(
+    (method: string, path: string, body?: object) =>
+      fetch(`${API_BASE}${path}`, {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      }),
+    [authToken]
+  );
 
-  const handleEdit = (cred: ClubCredential) => {
-    setEditingId(cred.clubId);
-    setEditForm({ username: cred.username, password: cred.password });
-  };
+  useEffect(() => {
+    apiCall('GET', '/admin/users')
+      .then(res => (res.ok ? res.json() : Promise.reject()))
+      .then((data: ClubAdminUser[]) => setUsers(data))
+      .catch(() => toast.error('Failed to load club accounts'))
+      .finally(() => setLoadingUsers(false));
+  }, [apiCall]);
 
-  const handleSave = (clubId: string) => {
-    setCredentials(prev => 
-      prev.map(cred => 
-        cred.clubId === clubId 
-          ? { ...cred, username: editForm.username, password: editForm.password }
-          : cred
-      )
-    );
-    toast.success('Credentials updated successfully');
-    setEditingId(null);
-  };
-
-  const handleCancel = () => {
-    setEditingId(null);
-    setEditForm({ username: '', password: '' });
+  const handleResetPassword = async (userId: string) => {
+    const newPassword = newPasswordForm[userId] ?? '';
+    if (newPassword.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    setResettingId(userId);
+    try {
+      const res = await apiCall('POST', `/admin/passwords/${userId}`, { newPassword });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? 'Failed to reset password');
+        return;
+      }
+      toast.success('Password updated successfully');
+      setNewPasswordForm(prev => ({ ...prev, [userId]: '' }));
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setResettingId(null);
+    }
   };
 
   return (
@@ -58,7 +73,7 @@ export function PasswordManagement() {
       <div>
         <h2 className="text-2xl mb-1">Password Management</h2>
         <p className="text-muted-foreground">
-          Manage login credentials for all club administrators
+          Reset login passwords for club administrator accounts
         </p>
       </div>
 
@@ -71,7 +86,8 @@ export function PasswordManagement() {
             <div>
               <p className="font-medium text-amber-900 mb-1">Security Notice</p>
               <p className="text-sm text-amber-800">
-                Only upper admin can create and modify club admin credentials. Store passwords securely and communicate them through official UO channels.
+                Only the root administrator can reset club passwords. Communicate new credentials
+                through official UO channels.
               </p>
             </div>
           </div>
@@ -80,122 +96,90 @@ export function PasswordManagement() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Club Admin Credentials</CardTitle>
+          <CardTitle>Club Admin Accounts</CardTitle>
           <CardDescription>
-            View and update login information for all registered clubs
+            Set a new password for any club admin account
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {credentials.map((cred) => {
-              const club = clubs.find(c => c.id === cred.clubId);
-              const isEditing = editingId === cred.clubId;
+          {loadingUsers ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">Loading accounts…</p>
+          ) : users.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4 text-center">
+              No club admin accounts found. Run the seed script to provision them.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              {users.map(user => {
+                const club = clubs.find(c => c.id === user.clubId);
+                const isResetting = resettingId === user.id;
 
-              return (
-                <div 
-                  key={cred.clubId} 
-                  className="border border-border rounded-lg p-4"
-                >
-                  <div className="flex items-start gap-4">
-                    {club && (
-                      <div 
-                        className="w-12 h-12 rounded-lg flex items-center justify-center text-white shrink-0"
-                        style={{ backgroundColor: club.color }}
-                      >
-                        <span className="text-lg">{club.name.substring(0, 2)}</span>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-3">
-                        <h4 className="font-semibold text-lg">{cred.clubName}</h4>
-                        <Badge variant="secondary" className="text-xs">Club Admin</Badge>
-                      </div>
-                      
-                      {isEditing ? (
-                        <div className="space-y-3">
-                          <div className="grid sm:grid-cols-2 gap-3">
-                            <div>
-                              <Label htmlFor={`username-${cred.clubId}`} className="text-xs">
-                                Username/Email
-                              </Label>
-                              <Input
-                                id={`username-${cred.clubId}`}
-                                value={editForm.username}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, username: e.target.value }))}
-                                className="mt-1"
-                              />
-                            </div>
-                            <div>
-                              <Label htmlFor={`password-${cred.clubId}`} className="text-xs">
-                                Password
-                              </Label>
-                              <Input
-                                id={`password-${cred.clubId}`}
-                                value={editForm.password}
-                                onChange={(e) => setEditForm(prev => ({ ...prev, password: e.target.value }))}
-                                className="mt-1"
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button 
-                              size="sm" 
-                              className="bg-primary"
-                              onClick={() => handleSave(cred.clubId)}
-                            >
-                              <Save className="h-3 w-3 mr-1" />
-                              Save
-                            </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={handleCancel}
-                            >
-                              <X className="h-3 w-3 mr-1" />
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="grid sm:grid-cols-2 gap-3">
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Username/Email</p>
-                              <p className="text-sm font-medium font-mono bg-muted px-2 py-1 rounded">
-                                {cred.username}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-muted-foreground mb-1">Password</p>
-                              <p className="text-sm font-medium font-mono bg-muted px-2 py-1 rounded">
-                                {'•'.repeat(cred.password.length)}
-                              </p>
-                            </div>
-                          </div>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => handleEdit(cred)}
-                          >
-                            <Pencil className="h-3 w-3 mr-1" />
-                            Edit Credentials
-                          </Button>
+                return (
+                  <div key={user.id} className="border border-border rounded-lg p-4">
+                    <div className="flex items-start gap-4">
+                      {club && (
+                        <div
+                          className="w-12 h-12 rounded-lg flex items-center justify-center text-white shrink-0 text-lg"
+                          style={{ backgroundColor: club.color }}
+                        >
+                          {club.name.substring(0, 2)}
                         </div>
                       )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold">{user.clubName ?? 'Unknown Club'}</h4>
+                          <Badge variant="secondary" className="text-xs">Club Admin</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground font-mono mb-3">{user.email}</p>
+
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1 max-w-xs">
+                            <Label htmlFor={`pw-${user.id}`} className="text-xs">
+                              New Password
+                            </Label>
+                            <Input
+                              id={`pw-${user.id}`}
+                              type="password"
+                              placeholder="Min. 8 characters"
+                              value={newPasswordForm[user.id] ?? ''}
+                              onChange={e =>
+                                setNewPasswordForm(prev => ({ ...prev, [user.id]: e.target.value }))
+                              }
+                              className="mt-1"
+                              disabled={isResetting}
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            className="bg-primary shrink-0"
+                            onClick={() => handleResetPassword(user.id)}
+                            disabled={isResetting || !newPasswordForm[user.id]}
+                          >
+                            {isResetting ? (
+                              <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Save className="h-3 w-3 mr-1" />
+                            )}
+                            {isResetting ? 'Saving…' : 'Set Password'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              setNewPasswordForm(prev => ({ ...prev, [user.id]: '' }))
+                            }
+                            disabled={isResetting}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-blue-200 bg-blue-50/50">
-        <CardContent className="pt-6">
-          <p className="text-sm text-blue-900">
-            <strong>Note:</strong> When you create a new club via the Club Roster page, you assign credentials during that process. This page allows you to view and update existing credentials.
-          </p>
+                );
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -119,7 +119,7 @@ export async function populate(clubName: string, icsUrl: string) {
                     // This handles "duplicate events flagged" by UID.
                     const { data: existingEvents, error: fetchError } = await supabase
                         .from('events')
-                        .select('id, club_id')
+                        .select('id, club_id, manually_edited')
                         .eq('uid', uid);
 
                     if (fetchError) {
@@ -133,19 +133,24 @@ export async function populate(clubName: string, icsUrl: string) {
                         // Event exists!
                         if (existingEvent.club_id === club.id) {
                             // It belongs to THIS club (Primary). Update it.
+                            // If an admin has manually edited this event, preserve their
+                            // changes to content fields — only refresh timing + RSVP info.
+                            const syncPayload: Record<string, any> = {
+                                start_time: new Date(start).toISOString(),
+                                end_time: new Date(end).toISOString(),
+                                last_updated: new Date().toISOString(),
+                                requires_rsvp: rsvpInfo.required,
+                                rsvp_link: rsvpInfo.link,
+                            };
+                            if (!existingEvent.manually_edited) {
+                                syncPayload.title = title;
+                                syncPayload.description = description;
+                                syncPayload.location = location;
+                                syncPayload.type_id = typeId;
+                            }
                             const { error: updateError } = await supabase
                                 .from('events')
-                                .update({
-                                    title: title,
-                                    description: description,
-                                    location: location,
-                                    start_time: new Date(start).toISOString(),
-                                    end_time: new Date(end).toISOString(),
-                                    last_updated: new Date().toISOString(),
-                                    type_id: typeId,
-                                    requires_rsvp: rsvpInfo.required,
-                                    rsvp_link: rsvpInfo.link
-                                })
+                                .update(syncPayload)
                                 .eq('id', existingEvent.id);
 
                             if (updateError) console.error(`Failed to update event ${uid}:`, updateError);

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Pencil, Trash2, Search, Settings, Calendar, MapPin, Clock, Instagram, Link as LinkIcon, Globe } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Pencil, Trash2, Search, Settings, Calendar, MapPin, Clock, Instagram, Link as LinkIcon, Globe, Plus, X } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 import { Button } from '../components/ui/button';
@@ -18,11 +18,13 @@ import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
+interface EventType { id: string; name: string; }
+
 export function Admin() {
   const { events, clubs, currentUser, authToken, updateEvent, deleteEvent, updateClub } = useApp();
 
   // Helper: authenticated API call
-  const apiCall = (method: string, path: string, body?: object) =>
+  const apiCall = useCallback((method: string, path: string, body?: object) =>
     fetch(`${API_BASE}${path}`, {
       method,
       headers: {
@@ -30,12 +32,58 @@ export function Admin() {
         ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
-    });
+    }), [authToken]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isManageOrgsModalOpen, setIsManageOrgsModalOpen] = useState(false);
   const [isEditClubModalOpen, setIsEditClubModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
+  // Controlled state for the event type select so FormData doesn't lose the value
+  const [editingEventType, setEditingEventType] = useState('');
+
+  // Event Types state (root admin only)
+  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+  const [editingTypeName, setEditingTypeName] = useState('');
+
+  useEffect(() => {
+    fetch(`${API_BASE}/event-types`)
+      .then(r => r.json())
+      .then(setEventTypes)
+      .catch(() => {});
+  }, []);
+
+  const handleAddType = async () => {
+    if (!newTypeName.trim()) return;
+    try {
+      const res = await apiCall('POST', '/event-types', { name: newTypeName.trim() });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to create type'); return; }
+      setEventTypes(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewTypeName('');
+    } catch { toast.error('Could not reach the server'); }
+  };
+
+  const handleRenameType = async (id: string) => {
+    if (!editingTypeName.trim()) return;
+    try {
+      const res = await apiCall('PATCH', `/event-types/${id}`, { name: editingTypeName.trim() });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to rename type'); return; }
+      setEventTypes(prev => prev.map(t => t.id === id ? data : t).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditingTypeId(null);
+    } catch { toast.error('Could not reach the server'); }
+  };
+
+  const handleDeleteType = async (id: string) => {
+    if (!confirm('Delete this event type? Events using it will show as "Other".')) return;
+    try {
+      const res = await apiCall('DELETE', `/event-types/${id}`);
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed'); return; }
+      setEventTypes(prev => prev.filter(t => t.id !== id));
+    } catch { toast.error('Could not reach the server'); }
+  };
 
   const isAdmin = currentUser?.role === 'admin';
   const isClubAdmin = currentUser?.role === 'club_officer';
@@ -60,6 +108,7 @@ export function Admin() {
 
   const handleEdit = (event: Event) => {
     setEditingEvent(event);
+    setEditingEventType(event.eventType);
     setIsEditModalOpen(true);
   };
 
@@ -88,7 +137,7 @@ export function Admin() {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       location: formData.get('location') as string,
-      eventType: formData.get('eventType') as string,
+      eventType: editingEventType,
     };
 
     try {
@@ -377,15 +426,13 @@ export function Admin() {
                   </div>
                   <div>
                     <Label htmlFor="eventType">Event Type</Label>
-                    <Select name="eventType" defaultValue={editingEvent.eventType}>
+                    <Select value={editingEventType} onValueChange={setEditingEventType}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {EVENT_TYPES.map(type => (
-                          <SelectItem key={type} value={type}>
-                            {type}
-                          </SelectItem>
+                        {(eventTypes.length > 0 ? eventTypes.map(et => et.name) : [...EVENT_TYPES]).map(type => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -530,6 +577,68 @@ export function Admin() {
         </CardContent>
       </Card>
 
+      {/* Event Types Management (root only) */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Event Types</CardTitle>
+            <CardDescription>Add, rename, or remove event type categories</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {eventTypes.map(et => (
+              <div key={et.id} className="flex items-center gap-2">
+                {editingTypeId === et.id ? (
+                  <>
+                    <input
+                      className="flex-1 border border-border rounded px-2 py-1 text-sm"
+                      value={editingTypeName}
+                      onChange={e => setEditingTypeName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleRenameType(et.id); }}
+                      autoFocus
+                    />
+                    <Button size="sm" onClick={() => handleRenameType(et.id)}>Save</Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingTypeId(null)}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm">{et.name}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => { setEditingTypeId(et.id); setEditingTypeName(et.name); }}
+                    >
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteType(et.id)}
+                    >
+                      <Trash2 className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            ))}
+            <div className="flex items-center gap-2 pt-2 border-t">
+              <input
+                className="flex-1 border border-border rounded px-2 py-1 text-sm"
+                placeholder="New event type name…"
+                value={newTypeName}
+                onChange={e => setNewTypeName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddType(); }}
+              />
+              <Button size="sm" onClick={handleAddType} disabled={!newTypeName.trim()}>
+                <Plus className="h-3 w-3 mr-1" />
+                Add
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Edit Event Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-2xl">
@@ -565,15 +674,13 @@ export function Admin() {
                 </div>
                 <div>
                   <Label htmlFor="eventType">Event Type</Label>
-                  <Select name="eventType" defaultValue={editingEvent.eventType}>
+                  <Select value={editingEventType} onValueChange={setEditingEventType}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {EVENT_TYPES.map(type => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
+                      {(eventTypes.length > 0 ? eventTypes.map(et => et.name) : [...EVENT_TYPES]).map(type => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

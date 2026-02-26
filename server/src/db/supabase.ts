@@ -14,4 +14,11 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
     // but the client won't work if keys are missing.
 }
 
-export const supabase = createClient(SUPABASE_URL || '', SUPABASE_KEY || '');
+// persistSession: false ensures the service role key is always used for RLS bypass,
+// even after calling auth.signInWithPassword (which would otherwise pollute the session).
+export const supabase = createClient(SUPABASE_URL || '', SUPABASE_KEY || '', {
+  auth: {
+    autoRefreshToken: false,
+    persistSession: false,
+  },
+});

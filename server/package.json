@@ -5,9 +5,11 @@
     "main": "index.js",
     "scripts": {
         "start": "node dist/index.js",
+        "dev": "ts-node src/index.ts",
         "build": "tsc",
         "populate": "ts-node src/scripts/populate_supabase.ts",
-        "sync-all": "ts-node src/scripts/sync_all.ts"
+        "sync-all": "ts-node src/scripts/sync_all.ts",
+        "seed": "ts-node src/scripts/seed_auth.ts"
     },
     "keywords": [],
     "author": "",
@@ -21,6 +23,7 @@
         "dotenv": "^16.4.1",
         "express": "^5.2.1",
         "ics": "^3.8.1",
+        "node-cron": "^4.2.1",
         "node-ical": "^0.17.1",
         "pg": "^8.18.0"
     },
@@ -28,6 +31,7 @@
         "@types/cors": "^2.8.19",
         "@types/express": "^5.0.6",
         "@types/node": "^20.11.16",
+        "@types/node-cron": "^3.0.11",
         "ts-node": "^10.9.2",
         "typescript": "^5.3.3"
     }

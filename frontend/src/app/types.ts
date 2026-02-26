@@ -14,6 +14,8 @@ export interface Club {
   id: string;
   name: string;
   color: string;
+  /** 'union' = student club/union  |  'department' = MCC department */
+  orgType: 'union' | 'department';
   outlookLink?: string;
   logo?: string;
   description?: string;

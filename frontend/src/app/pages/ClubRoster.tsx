@@ -1,5 +1,6 @@
 import { Users, ExternalLink, Plus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
 import { useNavigate } from 'react-router';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
@@ -83,7 +84,12 @@ export function ClubRoster() {
                   )}
                 </div>
                 <div className="flex-1">
-                  <CardTitle className="text-lg mb-1">{club.name}</CardTitle>
+                  <div className="flex items-center gap-2 mb-1">
+                    <CardTitle className="text-lg">{club.name}</CardTitle>
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {club.orgType === 'department' ? 'Department' : 'Union'}
+                    </Badge>
+                  </div>
                   <CardDescription className="line-clamp-2">
                     {club.description || 'Student organization'}
                   </CardDescription>

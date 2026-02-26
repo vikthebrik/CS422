@@ -21,3 +21,7 @@ services:
         value: "4000"
       - key: NODE_ENV
         value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: SYNC_CRON_SCHEDULE
+        value: "*/14 * * * *"

@@ -1,8 +1,20 @@
 import express from 'express';
 import cors from 'cors';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
 import { requireAuth, requireRoot, AuthenticatedRequest } from './middleware/auth';
+import { startCron } from './cron';
+
+// Creates a throwaway Supabase client for signInWithPassword so the shared
+// service-role client's session is never polluted by user auth state.
+function makeAuthClient() {
+  return createClient(
+    process.env.SUPABASE_URL ?? '',
+    process.env.SUPABASE_KEY ?? '',
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -44,7 +56,7 @@ app.post('/auth/login', async (req, res) => {
     return res.status(400).json({ error: 'invalid email format' });
   }
 
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await makeAuthClient().auth.signInWithPassword({ email, password });
   if (error || !data.session) {
     return res.status(401).json({ error: error?.message ?? 'Login failed' });
   }
@@ -107,6 +119,72 @@ app.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
 // POST /auth/logout — stateless JWT, so just acknowledge; client clears state.
 app.post('/auth/logout', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// POST /auth/forgot-password  { email }
+// Sends a Supabase password-reset email. The link in the email redirects to
+// FRONTEND_URL/reset-password with the recovery token in the URL hash.
+app.post('/auth/forgot-password', async (req, res) => {
+  const { email } = req.body as { email?: string };
+  if (!email) return res.status(400).json({ error: 'email is required' });
+
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${frontendUrl}/reset-password`,
+  });
+
+  // Always return 200 to avoid leaking whether an email exists
+  if (error) console.error('forgot-password error:', error.message);
+  res.json({ status: 'ok' });
+});
+
+// POST /auth/reset-password  { token, newPassword }
+// Validates the recovery token from the email link and updates the password.
+app.post('/auth/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'token and newPassword are required' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  // Verify the token and get the user identity
+  const { data: { user }, error: tokenError } = await supabase.auth.getUser(token);
+  if (tokenError || !user) {
+    return res.status(401).json({ error: 'Invalid or expired reset token' });
+  }
+
+  const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+    password: newPassword,
+  });
+  if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({ status: 'ok' });
+});
+
+// POST /auth/request-account  { clubName, contactEmail, message? }
+// Publicly accessible — lets clubs without an account submit a request.
+app.post('/auth/request-account', async (req, res) => {
+  const { clubName, contactEmail, message } = req.body as {
+    clubName?: string;
+    contactEmail?: string;
+    message?: string;
+  };
+  if (!clubName || !contactEmail) {
+    return res.status(400).json({ error: 'clubName and contactEmail are required' });
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(contactEmail)) {
+    return res.status(400).json({ error: 'invalid email format' });
+  }
+
+  const { error } = await supabase
+    .from('account_requests')
+    .insert({ club_name: clubName, contact_email: contactEmail, message: message ?? null });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json({ status: 'ok' });
 });
 
 // ---------------------------------------------------------------------------
@@ -217,7 +295,7 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
       typeId = et?.id ?? null;
     }
 
-    const updates: Record<string, any> = {};
+    const updates: Record<string, any> = { manually_edited: true };
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (location !== undefined) updates.location = location;
@@ -285,7 +363,7 @@ app.get('/clubs', async (_req, res) => {
 
     const { data, error } = await supabase
       .from('clubs')
-      .select('*')
+      .select('*, org_type')
       .order('name', { ascending: true });
 
     if (error) throw error;
@@ -353,6 +431,99 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     console.error('Error updating club:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/users — list all club admin accounts (root only)
+// Returns: { id, email, clubId, clubName }[]
+// ---------------------------------------------------------------------------
+app.get('/admin/users', requireRoot, async (_req, res) => {
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('user_id, email, club_id, clubs ( name )')
+    .eq('role', 'club_admin')
+    .order('email', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const users = (data ?? []).map((row: any) => ({
+    id: row.user_id,
+    email: row.email,
+    clubId: row.club_id,
+    clubName: row.clubs?.name ?? null,
+  }));
+
+  res.json(users);
+});
+
+// POST /admin/passwords/:userId  { newPassword }
+// Root admin forcibly sets a club admin's password.
+// ---------------------------------------------------------------------------
+app.post('/admin/passwords/:userId', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const userId = req.params.userId as string;
+  const { newPassword } = req.body as { newPassword?: string };
+  if (!newPassword) return res.status(400).json({ error: 'newPassword is required' });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(userId, { password: newPassword });
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ status: 'ok' });
+});
+
+// ---------------------------------------------------------------------------
+// Event Types CRUD (root admin only)
+// ---------------------------------------------------------------------------
+app.get('/event-types', async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('event_types')
+      .select('id, name')
+      .order('name', { ascending: true });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/event-types', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+
+  const { data, error } = await supabase
+    .from('event_types')
+    .insert({ name: name.trim() })
+    .select('id, name')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+app.patch('/event-types/:id', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { name } = req.body as { name?: string };
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+
+  const { data, error } = await supabase
+    .from('event_types')
+    .update({ name: name.trim() })
+    .eq('id', id)
+    .select('id, name')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+app.delete('/event-types/:id', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from('event_types').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
 });
 
 // ---------------------------------------------------------------------------
@@ -431,6 +602,7 @@ app.get('/events/ics', async (req, res) => {
 if (require.main === module) {
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    startCron();
   });
 }
 
