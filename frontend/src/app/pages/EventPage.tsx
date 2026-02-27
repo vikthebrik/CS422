@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
-import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { EVENT_TYPES } from '../types';
+import { getLocationUrl } from '../constants';
 
 export function EventPage() {
   const { eventId } = useParams();
@@ -124,18 +125,32 @@ export function EventPage() {
           </CardHeader>
           <CardContent>
             <div className="font-medium text-lg">{event.location}</div>
-            <Button variant="link" className="px-0 text-primary" asChild>
-              <a 
-                href={`https://maps.google.com/?q=${encodeURIComponent(event.location + ', University of Oregon')}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                View on Map →
-              </a>
-            </Button>
+            {(() => {
+              const { url, label } = getLocationUrl(event.location);
+              return (
+                <Button variant="link" className="px-0 text-primary" asChild>
+                  <a href={url} target="_blank" rel="noopener noreferrer">
+                    {label} →
+                  </a>
+                </Button>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
+
+      {/* RSVP / Tickets */}
+      {event.requiresRsvp && event.rsvpLink && (
+        <a
+          href={event.rsvpLink}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+        >
+          <Ticket className="h-5 w-5" />
+          Tickets / RSVP
+        </a>
+      )}
 
       {/* Description Card */}
       <Card>

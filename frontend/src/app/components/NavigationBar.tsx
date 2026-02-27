@@ -1,23 +1,30 @@
 import { Calendar, Menu, LogOut } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';
 import { useState } from 'react';
 import { LoginDialog } from './LoginDialog';
+import { ThemeToggle } from './ThemeToggle';
 import { toast } from 'sonner';
+import { ImageWithFallback } from './figma/ImageWithFallback';
 
 interface NavigationBarProps {
   onToggleSidebar?: () => void;
 }
 
 export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
-  const { currentUser, setCurrentUser, setAuthToken } = useApp();
+  const { currentUser, setCurrentUser, setAuthToken, clubs } = useApp();
+  const navigate = useNavigate();
+
+  const userClub = currentUser?.clubId ? clubs.find(c => c.id === currentUser.clubId) : null;
+  const displayName = userClub?.name ?? currentUser?.name ?? '';
   const [isLoginOpen, setIsLoginOpen] = useState(false);
 
   const handleSignOut = () => {
     setCurrentUser(null);
     setAuthToken(null);
     toast.success('Signed out successfully');
+    navigate('/');
   };
 
   return (
@@ -49,12 +56,39 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
             </Link>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {currentUser && (
               <div className="hidden sm:flex items-center gap-2 mr-2">
-                <div className="text-right">
-                  <p className="text-sm">{currentUser.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{currentUser.role.replace('_', ' ')}</p>
-                </div>
+                {userClub ? (
+                  <Link
+                    to={`/club/${userClub.id}`}
+                    className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  >
+                    {userClub.logo ? (
+                      <ImageWithFallback
+                        src={userClub.logo}
+                        alt={userClub.name}
+                        className="w-7 h-7 rounded object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center text-white text-xs font-medium shrink-0"
+                        style={{ backgroundColor: userClub.color }}
+                      >
+                        {userClub.name.substring(0, 2)}
+                      </div>
+                    )}
+                    <div className="text-right">
+                      <p className="text-sm">{displayName}</p>
+                      <p className="text-xs text-muted-foreground">Club Officer</p>
+                    </div>
+                  </Link>
+                ) : (
+                  <div className="text-right">
+                    <p className="text-sm">{displayName}</p>
+                    <p className="text-xs text-muted-foreground capitalize">{currentUser.role.replace('_', ' ')}</p>
+                  </div>
+                )}
               </div>
             )}
             {currentUser ? (

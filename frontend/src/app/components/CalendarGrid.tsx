@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Ticket } from "lucide-react";
 import { Button } from "./ui/button";
 import { Event } from "../types";
+import { ImageWithFallback } from "./figma/ImageWithFallback";
 import {
   format,
   startOfMonth,
@@ -320,15 +321,29 @@ export function CalendarGrid({
                               >
                                 <div className="space-y-1">
                                   {club && (
-                                    <p className="text-base font-bold text-white mb-2">
-                                      {club.name}
-                                    </p>
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div
+                                        className="w-5 h-5 rounded-full shrink-0 overflow-hidden"
+                                        style={{ backgroundColor: club.color }}
+                                      >
+                                        {club.logo && (
+                                          <ImageWithFallback
+                                            src={club.logo}
+                                            alt={club.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        )}
+                                      </div>
+                                      <p className="text-base font-bold text-white leading-tight">
+                                        {club.name}
+                                      </p>
+                                    </div>
                                   )}
                                   <p className="font-medium text-white">
                                     {event.title}
                                   </p>
                                   {event.description && (
-                                    <p className="text-xs text-white">
+                                    <p className="text-xs text-white/80 line-clamp-2">
                                       {event.description}
                                     </p>
                                   )}
@@ -339,16 +354,18 @@ export function CalendarGrid({
                                   )}
                                   <p className="text-xs text-white">
                                     🕐{" "}
-                                    {format(
-                                      event.startTime,
-                                      "h:mm a",
-                                    )}{" "}
-                                    -{" "}
-                                    {format(
-                                      event.endTime,
-                                      "h:mm a",
-                                    )}
+                                    {format(event.startTime, "h:mm a")}{" "}
+                                    –{" "}
+                                    {format(event.endTime, "h:mm a")}
                                   </p>
+                                  {event.requiresRsvp && event.rsvpLink && (
+                                    <div className="pt-1 border-t border-white/20">
+                                      <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300">
+                                        <Ticket className="h-3 w-3" />
+                                        Tickets / RSVP required
+                                      </span>
+                                    </div>
+                                  )}
                                 </div>
                               </TooltipContent>
                             </Tooltip>
@@ -437,15 +454,29 @@ export function CalendarGrid({
                                 >
                                   <div className="space-y-1">
                                     {club && (
-                                      <p className="text-base font-bold text-white mb-2">
-                                        {club.name}
-                                      </p>
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <div
+                                          className="w-5 h-5 rounded-full shrink-0 overflow-hidden"
+                                          style={{ backgroundColor: club.color }}
+                                        >
+                                          {club.logo && (
+                                            <ImageWithFallback
+                                              src={club.logo}
+                                              alt={club.name}
+                                              className="w-full h-full object-cover"
+                                            />
+                                          )}
+                                        </div>
+                                        <p className="text-base font-bold text-white leading-tight">
+                                          {club.name}
+                                        </p>
+                                      </div>
                                     )}
                                     <p className="font-medium text-white">
                                       {event.title}
                                     </p>
                                     {event.description && (
-                                      <p className="text-xs text-white">
+                                      <p className="text-xs text-white/80 line-clamp-2">
                                         {event.description}
                                       </p>
                                     )}
@@ -457,9 +488,17 @@ export function CalendarGrid({
                                     <p className="text-xs text-white">
                                       🕐{" "}
                                       {format(event.startTime, "h:mm a")}{" "}
-                                      -{" "}
+                                      –{" "}
                                       {format(event.endTime, "h:mm a")}
                                     </p>
+                                    {event.requiresRsvp && event.rsvpLink && (
+                                      <div className="pt-1 border-t border-white/20">
+                                        <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300">
+                                          <Ticket className="h-3 w-3" />
+                                          Tickets / RSVP required
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 </TooltipContent>
                               </Tooltip>
@@ -521,21 +560,47 @@ export function CalendarGrid({
                                     {event.title}
                                   </h3>
                                   {club && (
-                                    <p className="text-sm break-words" style={{ color: event.color }}>
-                                      {club.name}
-                                    </p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <div
+                                        className="w-4 h-4 rounded-full shrink-0 overflow-hidden"
+                                        style={{ backgroundColor: club.color }}
+                                      >
+                                        {club.logo && (
+                                          <ImageWithFallback
+                                            src={club.logo}
+                                            alt={club.name}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        )}
+                                      </div>
+                                      <p className="text-sm" style={{ color: event.color }}>
+                                        {club.name}
+                                      </p>
+                                    </div>
                                   )}
                                 </div>
                                 <div className="text-sm text-muted-foreground shrink-0">
-                                  {format(event.startTime, 'h:mm a')} - {format(event.endTime, 'h:mm a')}
+                                  {format(event.startTime, 'h:mm a')} – {format(event.endTime, 'h:mm a')}
                                 </div>
                               </div>
                               <p className="text-sm text-muted-foreground break-words">
                                 {event.description}
                               </p>
-                              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground break-words">
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground break-words">
                                 <span>📍 {event.location}</span>
                                 <span>• {event.eventType}</span>
+                                {event.requiresRsvp && event.rsvpLink && (
+                                  <a
+                                    href={event.rsvpLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
+                                  >
+                                    <Ticket className="h-3 w-3" />
+                                    Tickets / RSVP
+                                  </a>
+                                )}
                               </div>
                             </div>
                           </div>

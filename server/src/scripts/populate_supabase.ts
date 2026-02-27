@@ -56,34 +56,67 @@ export async function populate(clubName: string, icsUrl: string) {
         const classifyEvent = (title: string, desc: string): string | null => {
             const text = (title + " " + desc).toLowerCase();
 
-            // Strict Parsing Logic based on Tags
-            // [Event] or [E] -> Events
+            // Bracketed tags take priority
             if (text.includes("[event]") || text.includes("[e]")) return getTypeId("Events");
-
-            // [Meeting] or [M] -> Meetings
             if (text.includes("[meeting]") || text.includes("[m]")) return getTypeId("Meetings");
-
-            // [Office Hours] or [OH] -> Office Hours
             if (text.includes("[office hours]") || text.includes("[oh]")) return getTypeId("Office Hours");
-
-            // [Other] or [O] -> Other
             if (text.includes("[other]") || text.includes("[o]")) return getTypeId("Other");
+
+            // Plain keyword fallback — check "office hours" before "meeting" (more specific)
+            if (text.includes("office hours")) return getTypeId("Office Hours");
+            if (text.includes("meeting")) return getTypeId("Meetings");
 
             // Default
             return getTypeId("Other");
         };
 
-        const checkRsvp = (desc: string): { required: boolean, link: string | null } => {
-            const text = desc.toLowerCase();
-            const required = text.includes("rsvp") || text.includes("register") || text.includes("ticket");
-            let link = null;
+        // Strip Microsoft Teams meeting boilerplate from descriptions.
+        // Preserves the bare join URL and removes the multi-paragraph invite text.
+        const cleanDescription = (desc: string): string => {
+            // Match the separator line (underscores) or "Microsoft Teams meeting" header
+            const teamsStart = desc.search(
+                /_{5,}|Microsoft Teams meeting|Join Microsoft Teams Meeting/i
+            );
+            if (teamsStart === -1) return desc;
 
+            const before = desc.slice(0, teamsStart).trim();
+            const teamsBlock = desc.slice(teamsStart);
+
+            // Try to preserve the actual join URL
+            const joinUrlMatch = teamsBlock.match(
+                /https:\/\/teams\.microsoft\.com\/l\/meetup-join\/[^\s<>"]+/i
+            );
+            const suffix = joinUrlMatch
+                ? ` [Teams: ${joinUrlMatch[0]}]`
+                : ' [Teams meeting — link in original calendar]';
+
+            return (before + suffix).trim();
+        };
+
+        const checkRsvp = (title: string, desc: string): { required: boolean, link: string | null } => {
+            const titleText = title.toLowerCase();
+            const descText = desc.toLowerCase();
+
+            // Ticket/RSVP detection — do NOT trigger on Teams URLs alone
+            const hasTicketTag =
+                titleText.includes('[t]') || titleText.includes('[ticket]') ||
+                descText.includes('[t]') || descText.includes('[ticket]');
+            const hasTicketWord = /\btickets?\b/.test(descText);
+            const hasRsvpWord = descText.includes('rsvp') || descText.includes('register');
+
+            // Make sure a Teams-only URL doesn't falsely trigger ticket detection
+            const cleanedForCheck = cleanDescription(desc).toLowerCase();
+            const required =
+                hasTicketTag ||
+                (hasTicketWord && !cleanedForCheck.includes('teams')) ||
+                hasRsvpWord;
+
+            let link = null;
             if (required) {
-                const urlRegex = /(https?:\/\/[^\s]+)/g;
-                const matches = desc.match(urlRegex);
-                if (matches && matches.length > 0) {
-                    link = matches[0];
-                }
+                // Prefer non-Teams URLs as the RSVP link
+                const urlRegex = /(https?:\/\/[^\s<>"]+)/g;
+                const matches = [...desc.matchAll(urlRegex)].map(m => m[1]);
+                link = matches.find(u => !u.includes('teams.microsoft.com')) ?? matches[0] ?? null;
             }
             return { required, link };
         };
@@ -105,10 +138,11 @@ export async function populate(clubName: string, icsUrl: string) {
                     }
 
                     const title = event.summary || 'Untitled Event';
-                    const description = event.description || '';
+                    const rawDescription = event.description || '';
+                    const description = cleanDescription(rawDescription);
                     const location = event.location || '';
-                    const typeId = classifyEvent(title, description); // Apply Strict Classification
-                    const rsvpInfo = checkRsvp(description);
+                    const typeId = classifyEvent(title, description);
+                    const rsvpInfo = checkRsvp(title, description);
                     const uid = event.uid; // ICS UID
 
                     processedUids.push(uid);

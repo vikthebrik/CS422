@@ -115,7 +115,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 ## Org Type (Department vs Union)
 `clubs.org_type` column (migration 007): `'union'` (default) | `'department'`. Both map to `club_admin` role — same permission scope (own org only). The root admin is the only superuser. Frontend maps to `Club.orgType` and displays a "Department" / "Union" badge on ClubPage and ClubRoster.
 
-## Current State (last updated 2026-02-25)
+## Current State (last updated 2026-02-26)
 - Backend API is fully functional: caching, ICS generation, auth, mutations, cache-clear endpoint.
 - Frontend is fully wired to the backend — no mock data for clubs or events.
 - Auth flow (login, persist, sign-out, role-gating) is integrated.
@@ -134,3 +134,16 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - FilterSidebar uses live `eventTypeNames` from context (not hardcoded `EVENT_TYPES`).
 - Admin edit modal uses controlled `editingEventType` state for the event type Select (fixes FormData not capturing Radix Select value).
 - `collabEvents` / collab management page is not yet integrated with the API.
+- FilterSidebar: scrollable (overflow-y-auto), search bar added, Advanced Mode toggle (Zap icon) enables per-club event type filtering stored in `perClubEventTypes` in AppContext.
+- Dashboard: applies `searchQuery`, `advancedMode`/`perClubEventTypes` filter logic.
+- ClubPage: local search + event-type dropdown filter; past events toggle; ICS URL field in edit modal; edit modal now calls API (PATCH /clubs/:id).
+- Admin.tsx club edit modal also includes ICS URL field.
+- Logout now navigates to `/` (NavigationBar.tsx).
+- PATCH /clubs/:id now accepts `outlookLink` → saves to `ics_source_url`.
+- `user_roles.raw_password` column (migration 010): seed + password reset both write the plaintext password; GET /admin/users returns it; PasswordManagement shows it on load.
+- Login redirects to `/admin` after success (LoginDialog.tsx).
+- Sidebar is now a single `overflow-y-auto` container (no inner split) so all content scrolls together.
+- "Admin" tab removed from nav; replaced with "Clubs" tab (root admin only) at `/club-management`.
+- ClubManagement.tsx: add clubs (POST /clubs) + delete clubs (DELETE /clubs/:id, cascades events + user_roles).
+- Logo uploads: `POST /clubs/:id/logo` accepts base64 data URL, uploads to Supabase Storage bucket `club-logos` (auto-created), updates logo_url. Root admin: any club; club_admin: own club only. LogoUpload.tsx shared component used in ClubPage, Admin, and ClubManagement.
+- Express body limit raised to 8mb for logo payloads.

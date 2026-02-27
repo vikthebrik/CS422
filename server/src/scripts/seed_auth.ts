@@ -53,7 +53,7 @@ async function seedAuth() {
   const { error: rootRoleError } = await supabase
     .from('user_roles')
     .upsert(
-      { user_id: rootUser.id, email: ROOT_EMAIL, role: 'root', club_id: null },
+      { user_id: rootUser.id, email: ROOT_EMAIL, role: 'root', club_id: null, raw_password: ROOT_PASSWORD },
       { onConflict: 'user_id' }
     );
   if (rootRoleError) console.error('  ✗ Failed to upsert root user_role:', rootRoleError);
@@ -83,7 +83,7 @@ async function seedAuth() {
       const { error: clubRoleError } = await supabase
         .from('user_roles')
         .upsert(
-          { user_id: clubUser.id, email, role: 'club_admin', club_id: club.id },
+          { user_id: clubUser.id, email, role: 'club_admin', club_id: club.id, raw_password: DEFAULT_CLUB_PASSWORD },
           { onConflict: 'user_id' }
         );
       if (clubRoleError) console.error(`  ✗ user_role upsert failed for ${club.name}:`, clubRoleError);

@@ -14,6 +14,8 @@ interface ApiEvent {
   club_logo: string | null;
   type: string;
   collaborators: string[];
+  requires_rsvp: boolean | null;
+  rsvp_link: string | null;
 }
 
 function mapApiEvent(
@@ -30,6 +32,8 @@ function mapApiEvent(
     clubId: apiEvent.club_id,
     eventType: apiEvent.type,
     color: clubColorMap[apiEvent.club_id],
+    requiresRsvp: apiEvent.requires_rsvp ?? false,
+    rsvpLink: apiEvent.rsvp_link ?? null,
   };
 }
 

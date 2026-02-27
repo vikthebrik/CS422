@@ -50,6 +50,7 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       onOpenChange(false);
       setEmail('');
       setPassword('');
+      navigate('/admin');
     } catch {
       toast.error('Could not reach the server. Is it running?');
     } finally {

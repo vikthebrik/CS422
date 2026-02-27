@@ -1,9 +1,10 @@
-import { Calendar, Clock, MapPin, Users } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Ticket } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Event } from '../types';
 import { format } from 'date-fns';
 import { useApp } from '../context/AppContext';
+import { getLocationUrl } from '../constants';
 
 interface EventDetailModalProps {
   event: Event | null;
@@ -72,9 +73,35 @@ export function EventDetailModal({ event, open, onOpenChange }: EventDetailModal
               <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
               <div>
                 <div className="font-medium">{event.location}</div>
+                {(() => {
+                  const { url, label } = getLocationUrl(event.location);
+                  return (
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {label} →
+                    </a>
+                  );
+                })()}
               </div>
             </div>
           </div>
+
+          {/* RSVP / Tickets */}
+          {event.requiresRsvp && event.rsvpLink && (
+            <a
+              href={event.rsvpLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+            >
+              <Ticket className="h-4 w-4" />
+              Tickets / RSVP
+            </a>
+          )}
 
           {/* Footer */}
           <div className="pt-4 border-t border-border">

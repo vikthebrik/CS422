@@ -17,10 +17,19 @@ interface AppContextType {
   eventTypeNames: string[];
   /** Maps event type name → type UUID — used for ICS URL construction */
   typeIdMap: Record<string, string>;
+  /** Global text search query applied to event title/description */
+  searchQuery: string;
+  /** When true, per-club event type filtering is active instead of global */
+  advancedMode: boolean;
+  /** Per-club selected event types, keyed by clubId. Defaults to all types if a club has no entry. */
+  perClubEventTypes: Record<string, string[]>;
   loading: boolean;
   error: string | null;
   setSelectedClubs: (clubs: string[]) => void;
   setSelectedEventTypes: (types: string[]) => void;
+  setSearchQuery: (q: string) => void;
+  setAdvancedMode: (v: boolean) => void;
+  setPerClubEventTypes: (v: Record<string, string[]>) => void;
   setCurrentUser: (user: User | null) => void;
   setAuthToken: (token: string | null) => void;
   addEvent: (event: Event) => void;
@@ -45,6 +54,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [selectedClubs, setSelectedClubs] = useState<string[]>([]);
   const [selectedEventTypes, setSelectedEventTypes] = useState<string[]>([]);
   const [eventTypeNames, setEventTypeNames] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [advancedMode, setAdvancedMode] = useState(false);
+  const [perClubEventTypes, setPerClubEventTypes] = useState<Record<string, string[]>>({});
 
   // Token persisted to localStorage so admins stay logged in across page reloads
   const [authToken, setAuthTokenState] = useState<string | null>(
@@ -76,7 +88,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => setAuthToken(null));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only on mount
 
   // Sync API data into local state
@@ -102,10 +114,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setEventTypeNames(names);
         if (!eventTypesLoadDone.current && names.length > 0) {
           eventTypesLoadDone.current = true;
-          setSelectedEventTypes(names);
+          // By default, select all types EXCEPT "Office Hours"
+          setSelectedEventTypes(names.filter(n => n.toLowerCase() !== 'office hours'));
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const addEvent = (event: Event) => setEvents(prev => [...prev, event]);
@@ -135,10 +148,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectedEventTypes,
         eventTypeNames,
         typeIdMap,
+        searchQuery,
+        advancedMode,
+        perClubEventTypes,
         loading,
         error,
         setSelectedClubs,
         setSelectedEventTypes,
+        setSearchQuery,
+        setAdvancedMode,
+        setPerClubEventTypes,
         setCurrentUser,
         setAuthToken,
         addEvent,

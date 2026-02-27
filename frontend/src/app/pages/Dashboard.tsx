@@ -7,7 +7,17 @@ import { Event } from '../types';
 import { useApp } from '../context/AppContext';
 
 export function Dashboard() {
-  const { events, selectedClubs, selectedEventTypes, loading, error } = useApp();
+  const {
+    events,
+    selectedClubs,
+    selectedEventTypes,
+    eventTypeNames,
+    searchQuery,
+    advancedMode,
+    perClubEventTypes,
+    loading,
+    error,
+  } = useApp();
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -18,12 +28,26 @@ export function Dashboard() {
       filtered = filtered.filter(event => selectedClubs.includes(event.clubId));
     }
 
-    if (selectedEventTypes.length > 0) {
+    if (advancedMode) {
+      filtered = filtered.filter(event => {
+        const types = perClubEventTypes[event.clubId] ?? eventTypeNames;
+        return types.includes(event.eventType);
+      });
+    } else if (selectedEventTypes.length > 0) {
       filtered = filtered.filter(event => selectedEventTypes.includes(event.eventType));
     }
 
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        event =>
+          event.title.toLowerCase().includes(q) ||
+          event.description.toLowerCase().includes(q)
+      );
+    }
+
     return filtered;
-  }, [events, selectedClubs, selectedEventTypes]);
+  }, [events, selectedClubs, selectedEventTypes, advancedMode, perClubEventTypes, searchQuery, eventTypeNames]);
 
   const handleEventClick = (event: Event) => {
     setSelectedEvent(event);

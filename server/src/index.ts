@@ -28,7 +28,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : ['http://localhost:5173'];
 
 app.use(cors({ origin: allowedOrigins, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '8mb' })); // increased for base64 logo uploads
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -109,7 +109,7 @@ app.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
 
   return res.json({
     id: req.userId,
-    name: userData?.user?.user_metadata?.name ?? req.userId,
+    name: userData?.user?.user_metadata?.name ?? userData?.user?.email?.split('@')[0] ?? req.userId,
     email: userData?.user?.email,
     role: roleMap[roleRow.role] ?? 'club_officer',
     clubId: roleRow.club_id ?? null,
@@ -263,11 +263,12 @@ app.get('/events', async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { title, description, location, eventType } = req.body as {
+  const { title, description, location, eventType, rsvpLink } = req.body as {
     title?: string;
     description?: string;
     location?: string;
     eventType?: string;
+    rsvpLink?: string | null;
   };
 
   try {
@@ -300,6 +301,10 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
     if (description !== undefined) updates.description = description;
     if (location !== undefined) updates.location = location;
     if (typeId) updates.type_id = typeId;
+    if (rsvpLink !== undefined) {
+      updates.rsvp_link = rsvpLink || null;
+      if (rsvpLink) updates.requires_rsvp = true;
+    }
 
     const { data, error } = await supabase
       .from('events')
@@ -318,6 +323,67 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
     });
   } catch (err: any) {
     console.error('Error updating event:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /events — create a new event (auth required, manually_edited = true)
+// ---------------------------------------------------------------------------
+app.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { title, description, location, eventType, clubId, startTime, endTime, rsvpLink } = req.body;
+
+  if (!title || !clubId || !startTime || !endTime) {
+    return res.status(400).json({ error: 'title, clubId, startTime, and endTime are required' });
+  }
+
+  if (req.userRole === 'club_admin' && clubId !== req.userClubId) {
+    return res.status(403).json({ error: 'You can only create events for your own organization' });
+  }
+
+  try {
+    // Resolve eventType name → type_id
+    let typeId: string | null = null;
+    if (eventType) {
+      const { data: typeRow } = await supabase
+        .from('event_types')
+        .select('id')
+        .eq('name', eventType)
+        .single();
+      if (typeRow) typeId = typeRow.id;
+    }
+
+    const uid = `manual-${crypto.randomUUID()}`;
+
+    const { data, error } = await supabase
+      .from('events')
+      .insert({
+        uid,
+        title,
+        description: description ?? '',
+        location: location ?? '',
+        club_id: clubId,
+        type_id: typeId,
+        start_time: startTime,
+        end_time: endTime,
+        manually_edited: true,
+        requires_rsvp: !!rsvpLink || /\b(ticket|rsvp)\b/i.test(description ?? ''),
+        rsvp_link: rsvpLink || null,
+      })
+      .select(`*, clubs(name, logo_url), event_types(name)`)
+      .single();
+
+    if (error) throw error;
+
+    clearCacheKey('events:all');
+    res.status(201).json({
+      ...data,
+      club_name: (data as any).clubs?.name,
+      club_logo: (data as any).clubs?.logo_url,
+      type: (data as any).event_types?.name ?? 'Other',
+    });
+  } catch (err: any) {
+    console.error('Error creating event:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -381,11 +447,12 @@ app.get('/clubs', async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { description, instagram, linktree, engage } = req.body as {
+  const { description, instagram, linktree, engage, outlookLink } = req.body as {
     description?: string;
     instagram?: string;
     linktree?: string;
     engage?: string;
+    outlookLink?: string;
   };
 
   try {
@@ -415,6 +482,9 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
         ...(engage !== undefined ? { engage } : {}),
       };
     }
+    if (outlookLink !== undefined) {
+      updates.ics_source_url = outlookLink || null;
+    }
 
     const { data, error } = await supabase
       .from('clubs')
@@ -434,13 +504,310 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Color helpers for logo-based club color assignment
+// ---------------------------------------------------------------------------
+function hexToRgb(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ];
+}
+
+function rgbDistance(h1: string, h2: string): number {
+  const [r1, g1, b1] = hexToRgb(h1);
+  const [r2, g2, b2] = hexToRgb(h2);
+  return Math.sqrt((r2 - r1) ** 2 + (g2 - g1) ** 2 + (b2 - b1) ** 2);
+}
+
+/** Rotate the hue of a hex color by `degrees` (0-360). */
+function rotateHue(hex: string, degrees: number): string {
+  let [r, g, b] = hexToRgb(hex).map(v => v / 255) as [number, number, number];
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  let h = 0, s = 0;
+  const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+    h /= 6;
+  }
+  h = ((h * 360 + degrees) % 360) / 360;
+  const sFinal = Math.max(0.45, s);
+  const lFinal = Math.min(0.65, Math.max(0.35, l));
+  const q = lFinal < 0.5 ? lFinal * (1 + sFinal) : lFinal + sFinal - lFinal * sFinal;
+  const p = 2 * lFinal - q;
+  const hue2rgb = (t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+  };
+  return '#' + [hue2rgb(h + 1 / 3), hue2rgb(h), hue2rgb(h - 1 / 3)]
+    .map(v => Math.round(v * 255).toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/** Ensure `color` is at least MIN_DISTANCE away from all other clubs' colors. */
+async function deduplicateColor(color: string, excludeClubId: string): Promise<string> {
+  const MIN_DISTANCE = 85;
+  const { data } = await supabase.from('clubs').select('metadata_tags').neq('id', excludeClubId);
+  const existingColors: string[] = (data ?? [])
+    .map((c: any) => c.metadata_tags?.color)
+    .filter((c: any) => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c));
+
+  let result = color;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    if (!existingColors.some(ec => rgbDistance(result, ec) < MIN_DISTANCE)) break;
+    result = rotateHue(result, 30);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// POST /clubs/:id/logo  { logo: "data:<mime>;base64,<data>", color?: "#rrggbb" }
+// Upload a club logo image to Supabase Storage and update logo_url.
+// If `color` is provided, stores it in metadata_tags.color after de-duplication.
+// Root can update any club; club_admin can only update their own.
+// ---------------------------------------------------------------------------
+app.post('/clubs/:id/logo', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { logo, color } = req.body as { logo?: string; color?: string };
+  if (!logo) return res.status(400).json({ error: 'logo is required' });
+
+  try {
+    if (req.userRole === 'club_admin' && req.userClubId !== id) {
+      return res.status(403).json({ error: 'You can only update your own club logo' });
+    }
+
+    // Parse the data URL: "data:<mime>;base64,<data>"
+    const match = logo.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+    if (!match) return res.status(400).json({ error: 'Invalid image data URL' });
+    const [, contentType, base64Data] = match;
+    const ext = contentType.split('/')[1].replace('+xml', '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const filename = `${id}.${ext}`;
+
+    // Ensure the bucket exists (no-op if already exists)
+    await supabase.storage.createBucket('club-logos', { public: true }).catch(() => {});
+
+    // Upload (upsert so re-uploading replaces the previous logo)
+    const { error: uploadError } = await supabase.storage
+      .from('club-logos')
+      .upload(filename, buffer, { contentType, upsert: true });
+
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabase.storage.from('club-logos').getPublicUrl(filename);
+
+    // Build the DB update payload
+    const updatePayload: Record<string, any> = { logo_url: publicUrl };
+
+    // If the frontend supplied an extracted dominant color, de-duplicate it
+    // against all other clubs and store in metadata_tags.color
+    if (color && /^#[0-9a-f]{6}$/i.test(color)) {
+      const uniqueColor = await deduplicateColor(color, id as string);
+      // Merge into existing metadata_tags (JSONB)
+      const { data: existing } = await supabase
+        .from('clubs').select('metadata_tags').eq('id', id).single();
+      const existingTags = (existing as any)?.metadata_tags ?? {};
+      updatePayload.metadata_tags = { ...existingTags, color: uniqueColor };
+    }
+
+    const { data, error: updateError } = await supabase
+      .from('clubs')
+      .update(updatePayload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) return res.status(500).json({ error: updateError.message });
+
+    clearCacheKey('clubs:all');
+    res.json({ logo_url: publicUrl, club: data });
+  } catch (err: any) {
+    console.error('Error uploading logo:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /clubs — create a new club (root only)
+// ---------------------------------------------------------------------------
+app.post('/clubs', requireRoot, async (_req: AuthenticatedRequest, res) => {
+  const { name, orgType, description } = _req.body as {
+    name?: string;
+    orgType?: 'union' | 'department';
+    description?: string;
+  };
+  if (!name?.trim()) return res.status(400).json({ error: 'name is required' });
+
+  const metadata_tags: Record<string, any> = {};
+  if (description?.trim()) metadata_tags.description = description.trim();
+
+  const { data, error } = await supabase
+    .from('clubs')
+    .insert({
+      name: name.trim(),
+      org_type: orgType ?? 'union',
+      metadata_tags: Object.keys(metadata_tags).length ? metadata_tags : null,
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  clearCacheKey('clubs:all');
+  res.status(201).json(data);
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /clubs/:id — delete a club and all its events/roles (root only)
+// ---------------------------------------------------------------------------
+app.delete('/clubs/:id', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  try {
+    // 1. Delete all events belonging to this club
+    const { error: eventsError } = await supabase.from('events').delete().eq('club_id', id);
+    if (eventsError) throw eventsError;
+
+    // 2. Remove user_roles rows tied to this club (orphaned club admin accounts)
+    const { error: rolesError } = await supabase.from('user_roles').delete().eq('club_id', id);
+    if (rolesError) throw rolesError;
+
+    // 3. Delete the club itself
+    const { error: clubError } = await supabase.from('clubs').delete().eq('id', id);
+    if (clubError) throw clubError;
+
+    clearCacheKey('clubs:all');
+    clearCacheKey('events:all');
+    res.json({ status: 'ok' });
+  } catch (err: any) {
+    console.error('Error deleting club:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/requests — list all account requests (root only)
+// ---------------------------------------------------------------------------
+app.get('/admin/requests', requireRoot, async (_req, res) => {
+  const { data, error } = await supabase
+    .from('account_requests')
+    .select('id, club_name, contact_email, message, status, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data ?? []);
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/requests/:id/approve  { orgType? }
+// Creates club + auth user + user_role; marks request approved.
+// Returns: { clubId, clubName, email, password }
+// ---------------------------------------------------------------------------
+app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const requestId = req.params.id as string;
+  const { orgType = 'union' } = req.body as { orgType?: string };
+
+  const { data: request, error: fetchErr } = await supabase
+    .from('account_requests')
+    .select('id, club_name, contact_email, status')
+    .eq('id', requestId)
+    .single();
+
+  if (fetchErr || !request) return res.status(404).json({ error: 'Request not found' });
+  if ((request as any).status !== 'pending') {
+    return res.status(400).json({ error: `Request is already ${(request as any).status}` });
+  }
+
+  const clubName = (request as any).club_name as string;
+  const email = (request as any).contact_email as string;
+  // Generate a simple memorable password
+  const password =
+    Math.random().toString(36).slice(2, 8) +
+    Math.random().toString(36).slice(2, 5).toUpperCase() +
+    '!1';
+
+  try {
+    // 1. Create club
+    const { data: club, error: clubErr } = await supabase
+      .from('clubs')
+      .insert({ name: clubName, org_type: orgType })
+      .select('id, name')
+      .single();
+
+    if (clubErr || !club) throw clubErr ?? new Error('Failed to create club');
+
+    // 2. Create auth user
+    const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+
+    if (authErr || !authData?.user) {
+      await supabase.from('clubs').delete().eq('id', (club as any).id);
+      throw authErr ?? new Error('Failed to create auth user');
+    }
+
+    const userId = authData.user.id;
+
+    // 3. Insert user_role (without raw_password first, in case column doesn't exist yet)
+    const { error: roleErr } = await supabase.from('user_roles').insert({
+      user_id: userId,
+      email,
+      club_id: (club as any).id,
+      role: 'club_admin',
+    });
+
+    if (roleErr) {
+      await supabase.auth.admin.deleteUser(userId);
+      await supabase.from('clubs').delete().eq('id', (club as any).id);
+      throw roleErr;
+    }
+
+    // 4. Try to store the plaintext password for the admin UI (best-effort — column may not exist)
+    await supabase.from('user_roles').update({ raw_password: password }).eq('user_id', userId);
+
+    // 5. Mark request approved
+    await supabase.from('account_requests').update({ status: 'approved' }).eq('id', requestId);
+
+    clearCacheKey('clubs:all');
+
+    res.json({ clubId: (club as any).id, clubName: (club as any).name, email, password });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message ?? 'Approval failed' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/requests/:id/reject
+// ---------------------------------------------------------------------------
+app.post('/admin/requests/:id/reject', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { error } = await supabase
+    .from('account_requests')
+    .update({ status: 'rejected' })
+    .eq('id', req.params.id as string);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
+});
+
+// ---------------------------------------------------------------------------
 // GET /admin/users — list all club admin accounts (root only)
 // Returns: { id, email, clubId, clubName }[]
 // ---------------------------------------------------------------------------
 app.get('/admin/users', requireRoot, async (_req, res) => {
   const { data, error } = await supabase
     .from('user_roles')
-    .select('user_id, email, club_id, clubs ( name )')
+    .select('user_id, email, club_id, raw_password, clubs ( name )')
     .eq('role', 'club_admin')
     .order('email', { ascending: true });
 
@@ -451,6 +818,7 @@ app.get('/admin/users', requireRoot, async (_req, res) => {
     email: row.email,
     clubId: row.club_id,
     clubName: row.clubs?.name ?? null,
+    rawPassword: row.raw_password ?? null,
   }));
 
   res.json(users);
@@ -469,6 +837,9 @@ app.post('/admin/passwords/:userId', requireRoot, async (req: AuthenticatedReque
 
   const { error } = await supabase.auth.admin.updateUserById(userId, { password: newPassword });
   if (error) return res.status(500).json({ error: error.message });
+
+  // Persist the raw password so root admin can look it up later
+  await supabase.from('user_roles').update({ raw_password: newPassword }).eq('user_id', userId);
 
   res.json({ status: 'ok' });
 });

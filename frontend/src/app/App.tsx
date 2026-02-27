@@ -1,4 +1,5 @@
 import { RouterProvider, createBrowserRouter } from 'react-router';
+import { ThemeProvider } from 'next-themes';
 import { AppProvider } from './context/AppContext';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
@@ -7,7 +8,7 @@ import { Collab } from './pages/Collab';
 import { ClubRoster } from './pages/ClubRoster';
 import { ClubPage } from './pages/ClubPage';
 import { EventPage } from './pages/EventPage';
-import { PasswordManagement } from './pages/PasswordManagement';
+import { ClubManagement } from './pages/ClubManagement';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { RequestAccount } from './pages/RequestAccount';
@@ -42,8 +43,8 @@ const router = createBrowserRouter([
         Component: Collab,
       },
       {
-        path: "passwords",
-        Component: PasswordManagement,
+        path: "club-management",
+        Component: ClubManagement,
       },
       {
         path: "forgot-password",
@@ -63,8 +64,10 @@ const router = createBrowserRouter([
 
 export default function App() {
   return (
-    <AppProvider>
-      <RouterProvider router={router} />
-    </AppProvider>
+    <ThemeProvider attribute="class" defaultTheme="system" disableTransitionOnChange>
+      <AppProvider>
+        <RouterProvider router={router} />
+      </AppProvider>
+    </ThemeProvider>
   );
 }

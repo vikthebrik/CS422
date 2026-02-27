@@ -8,6 +8,8 @@ export interface Event {
   clubId: string;
   eventType: string;
   color?: string;
+  requiresRsvp?: boolean;
+  rsvpLink?: string | null;
 }
 
 export interface Club {
