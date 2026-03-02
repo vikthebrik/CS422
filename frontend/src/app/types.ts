@@ -53,3 +53,44 @@ export const EVENT_TYPES = [
   'Office Hours',
   'Other'
 ] as const;
+
+// ---------------------------------------------------------------------------
+// About-page block types
+// ---------------------------------------------------------------------------
+
+export interface TextBlock {
+  id: string;
+  type: 'text';
+  title?: string;
+  content: string;
+}
+
+export interface MediaBlock {
+  id: string;
+  type: 'media';
+  mediaType: 'image' | 'video';
+  url: string;
+  caption?: string;
+}
+
+export interface LinkItem {
+  label: string;
+  url: string;
+  description?: string;
+}
+
+export interface LinkContainerBlock {
+  id: string;
+  type: 'links';
+  title?: string;
+  links: LinkItem[];
+}
+
+export interface ClubShowcaseBlock {
+  id: string;
+  type: 'clubs';
+  title?: string;
+  clubIds: string[];
+}
+
+export type Block = TextBlock | MediaBlock | LinkContainerBlock | ClubShowcaseBlock;

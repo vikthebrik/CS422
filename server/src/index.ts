@@ -1018,6 +1018,78 @@ app.get('/events/ics', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Site Settings — flexible JSON storage for page content (e.g. About page)
+// ---------------------------------------------------------------------------
+
+// GET /site-settings/:key — public, returns the stored JSON value (or null)
+app.get('/site-settings/:key', async (req, res) => {
+  const { key } = req.params;
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', key)
+      .maybeSingle();
+    if (error) throw error;
+    res.json(data ? data.value : null);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /site-settings/:key — root only, upserts the JSON value
+app.put('/site-settings/:key', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { key } = req.params;
+  const { value } = req.body as { value?: unknown };
+  if (value === undefined) return res.status(400).json({ error: 'value is required' });
+
+  try {
+    const { error } = await supabase
+      .from('site_settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    res.json({ status: 'ok' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /site-settings/upload — root only, uploads a media file to Supabase Storage
+// Body: { dataUrl: string, filename: string }
+// Returns: { url: string }
+app.post('/site-settings/upload', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const { dataUrl, filename } = req.body as { dataUrl?: string; filename?: string };
+  if (!dataUrl || !filename) {
+    return res.status(400).json({ error: 'dataUrl and filename are required' });
+  }
+
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return res.status(400).json({ error: 'Invalid data URL format' });
+
+  const [, contentType, base64] = match;
+  const buffer = Buffer.from(base64, 'base64');
+  const ext = contentType.split('/')[1]?.split('+')[0] ?? 'bin';
+  const safeName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
+
+  try {
+    await supabase.storage.createBucket('mcc-public-assets', { public: true }).catch(() => {});
+
+    const { error: uploadError } = await supabase.storage
+      .from('mcc-public-assets')
+      .upload(safeName, buffer, { contentType, upsert: false });
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('mcc-public-assets')
+      .getPublicUrl(safeName);
+
+    res.json({ url: publicUrl });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 if (require.main === module) {

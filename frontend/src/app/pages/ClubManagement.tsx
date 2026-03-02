@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -74,6 +74,10 @@ export function ClubManagement() {
   const [defaultStart, setDefaultStart] = useState('');
   const [defaultEnd, setDefaultEnd] = useState('');
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
+  const [newTypeName, setNewTypeName] = useState('');
+  const [editingTypeId, setEditingTypeId] = useState<string | null>(null);
+  const [editingTypeName, setEditingTypeName] = useState('');
+  const [deleteTypeConfirm, setDeleteTypeConfirm] = useState<EventType | null>(null);
 
   const apiCall = useCallback(
     (method: string, path: string, body?: object) =>
@@ -94,6 +98,37 @@ export function ClubManagement() {
       .then(setEventTypes)
       .catch(() => {});
   }, []);
+
+  const handleAddType = async () => {
+    if (!newTypeName.trim()) return;
+    try {
+      const res = await apiCall('POST', '/event-types', { name: newTypeName.trim() });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to create type'); return; }
+      setEventTypes(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
+      setNewTypeName('');
+    } catch { toast.error('Could not reach the server'); }
+  };
+
+  const handleRenameType = async (id: string) => {
+    if (!editingTypeName.trim()) return;
+    try {
+      const res = await apiCall('PATCH', `/event-types/${id}`, { name: editingTypeName.trim() });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to rename type'); return; }
+      setEventTypes(prev => prev.map(t => t.id === id ? data : t).sort((a, b) => a.name.localeCompare(b.name)));
+      setEditingTypeId(null);
+    } catch { toast.error('Could not reach the server'); }
+  };
+
+  const handleDeleteType = async (id: string) => {
+    try {
+      const res = await apiCall('DELETE', `/event-types/${id}`);
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed'); return; }
+      setEventTypes(prev => prev.filter(t => t.id !== id));
+      setDeleteTypeConfirm(null);
+    } catch { toast.error('Could not reach the server'); }
+  };
 
   const openCreateEvent = () => {
     const now = new Date();
@@ -558,6 +593,66 @@ export function ClubManagement() {
         </div>
       )}
 
+      {/* Event Types Management */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Event Types</CardTitle>
+          <CardDescription>Add, rename, or remove event type categories</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {eventTypes.map(et => (
+            <div key={et.id} className="flex items-center gap-2">
+              {editingTypeId === et.id ? (
+                <>
+                  <input
+                    className="flex-1 border border-border rounded px-2 py-1 text-sm"
+                    value={editingTypeName}
+                    onChange={e => setEditingTypeName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleRenameType(et.id); }}
+                    autoFocus
+                  />
+                  <Button size="sm" onClick={() => handleRenameType(et.id)}>Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingTypeId(null)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 text-sm">{et.name}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => { setEditingTypeId(et.id); setEditingTypeName(et.name); }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setDeleteTypeConfirm(et)}
+                  >
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
+                </>
+              )}
+            </div>
+          ))}
+          <div className="flex items-center gap-2 pt-2 border-t">
+            <input
+              className="flex-1 border border-border rounded px-2 py-1 text-sm"
+              placeholder="New event type name…"
+              value={newTypeName}
+              onChange={e => setNewTypeName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAddType(); }}
+            />
+            <Button size="sm" onClick={handleAddType} disabled={!newTypeName.trim()}>
+              <Plus className="h-3 w-3 mr-1" />
+              Add
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Delete confirmation dialog */}
       {deleteConfirm && (() => {
         const eventCount = events.filter(e => e.clubId === deleteConfirm.id).length;
@@ -824,6 +919,31 @@ export function ClubManagement() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete event type confirmation */}
+      {deleteTypeConfirm && (
+        <Dialog open onOpenChange={open => { if (!open) setDeleteTypeConfirm(null); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+                <DialogTitle>Delete "{deleteTypeConfirm.name}"?</DialogTitle>
+              </div>
+              <DialogDescription>
+                Events using this type will show as "Other". This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setDeleteTypeConfirm(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => handleDeleteType(deleteTypeConfirm.id)}>
+                <Trash2 className="h-4 w-4 mr-2" />Delete
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

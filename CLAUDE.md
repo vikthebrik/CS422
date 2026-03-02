@@ -73,6 +73,11 @@ cd frontend && pnpm dev
 - `GET /admin/users` → `{ id, email, clubId, clubName }[]` — list all club_admin accounts
 - `POST /admin/passwords/:userId { newPassword }` — force-set a club admin's password
 
+### Site Settings
+- `GET /site-settings/:key` → returns `jsonb value` or `null` (public)
+- `PUT /site-settings/:key { value }` → upserts jsonb (requireRoot)
+- `POST /site-settings/upload { dataUrl, filename }` → uploads to `mcc-public-assets` bucket, returns `{ url }` (requireRoot)
+
 ### Internal
 - `POST /internal/cache/clear` with header `x-sync-secret: <SYNC_SECRET>` — clears cache, no JWT needed
 
@@ -123,7 +128,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - Upcoming events on ClubPage now display date + time (fixed 2026-02-25).
 - Full auth suite implemented: forgot-password, reset-password, request-account flows.
 - PasswordManagement.tsx now fetches real users from /admin/users and resets via API.
-- Admin.tsx has an Event Types CRUD section (root admin only).
+- Event Types CRUD section (root admin only) is in ClubManagement.tsx (migrated from Admin.tsx).
 - LoginDialog.tsx has email validation + "Forgot Password" / "Request Account" links.
 - Routes added: /forgot-password, /reset-password, /request-account.
 - seed_auth.ts rewritten to use supabase.auth.admin.createUser (no more bcrypt/users table).
@@ -135,6 +140,9 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - FilterSidebar uses live `eventTypeNames` from context (not hardcoded `EVENT_TYPES`).
 - Admin edit modal uses controlled `editingEventType` state for the event type Select (fixes FormData not capturing Radix Select value).
 - `collabEvents` / collab management page is not yet integrated with the API.
+- `/about` page is implemented with a block-based CMS: TextBlock, MediaBlock, LinkContainerBlock, ClubShowcaseBlock. Root admin can edit/reorder/add/delete blocks inline. Content stored in `site_settings` table (key=`about-page`, value=jsonb Block[]). Requires DB migration `011_site_settings.sql`. Media uploads go to `mcc-public-assets` Supabase Storage bucket via `POST /site-settings/upload`.
+- `/admin` route removed (Event Management page fully deprecated). `Admin.tsx` file remains but is no longer routed.
+- ICS subscription feature (`SubscriptionLinkGenerator.tsx`) shows an "under construction / coming soon" placeholder — all functional code stripped.
 - FilterSidebar: scrollable (overflow-y-auto), search bar added, Advanced Mode toggle (Zap icon) enables per-club event type filtering stored in `perClubEventTypes` in AppContext.
 - Dashboard: applies `searchQuery`, `advancedMode`/`perClubEventTypes` filter logic.
 - ClubPage: local search + event-type dropdown filter; past events toggle; ICS URL field in edit modal; edit modal now calls API (PATCH /clubs/:id).

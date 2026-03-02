@@ -4,7 +4,7 @@ import { AppProvider } from './context/AppContext';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Dashboard } from './pages/Dashboard';
-import { Admin } from './pages/Admin';
+import { About } from './pages/About';
 import { Collab } from './pages/Collab';
 import { ClubRoster } from './pages/ClubRoster';
 import { ClubPage } from './pages/ClubPage';
@@ -21,6 +21,7 @@ const router = createBrowserRouter([
     children: [
       // Public routes
       { index: true, Component: Dashboard },
+      { path: "about", Component: About },
       { path: "clubs", Component: ClubRoster },
       { path: "club/:clubId", Component: ClubPage },
       { path: "event/:eventId", Component: EventPage },
@@ -40,7 +41,6 @@ const router = createBrowserRouter([
       {
         element: <ProtectedRoute role="admin" />,
         children: [
-          { path: "admin", Component: Admin },
           { path: "club-management", Component: ClubManagement },
         ],
       },

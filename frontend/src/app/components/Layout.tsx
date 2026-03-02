@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router';
 import { NavigationBar } from './NavigationBar';
 import { FilterSidebar } from './FilterSidebar';
-import { Calendar, Users, BookOpen, KeyRound, Building2 } from 'lucide-react';
+import { EventReminderPopup } from './EventReminderPopup';
+import { Calendar, Users, BookOpen, Building2, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toaster } from './ui/sonner';
 
@@ -14,6 +15,7 @@ export function Layout() {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Calendar, public: true },
     { name: 'Club Roster', href: '/clubs', icon: BookOpen, public: true },
+    { name: 'About', href: '/about', icon: Info, public: true },
     { name: 'Collaborate', href: '/collab', icon: Users, roles: ['admin', 'club_officer'] },
     { name: 'Clubs', href: '/club-management', icon: Building2, roles: ['admin'] },
   ];
@@ -71,6 +73,7 @@ export function Layout() {
       </div>
 
       <Toaster />
+      <EventReminderPopup />
     </div>
   );
 }
