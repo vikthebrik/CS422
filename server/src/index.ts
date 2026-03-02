@@ -244,6 +244,11 @@ app.post('/admin/cache/clear-all', requireRoot, (_req, res) => {
 // ---------------------------------------------------------------------------
 app.get('/events', async (_req, res) => {
   try {
+    // Set caching headers for Vercel Edge Network
+    // s-maxage=120: Edge CDN caches for 2 minutes
+    // stale-while-revalidate=59: Serve stale content while fetching fresh data in the background for up to 59s
+    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=59');
+
     const cacheKey = 'events:all';
     const cached = getFromCache<any[]>(cacheKey);
     if (cached) return res.json(cached);
@@ -449,6 +454,11 @@ app.delete('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
 // ---------------------------------------------------------------------------
 app.get('/clubs', async (_req, res) => {
   try {
+    // Set caching headers for Vercel Edge Network
+    // s-maxage=120: Edge CDN caches for 2 minutes
+    // stale-while-revalidate=59: Serve stale content while fetching fresh data in the background for up to 59s
+    res.setHeader('Cache-Control', 's-maxage=120, stale-while-revalidate=59');
+
     const cacheKey = 'clubs:all';
     const cached = getFromCache<any[]>(cacheKey);
     if (cached) return res.json(cached);
