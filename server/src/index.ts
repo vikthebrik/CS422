@@ -27,7 +27,28 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
   : ['http://localhost:5173'];
 
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like curl requests)
+    if (!origin) return callback(null, true);
+
+    // Exact match from ALLOWED_ORIGINS
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // Dynamic Vercel preview branch/PR deployments
+    if (
+      origin.startsWith('https://mcc-scheduler-') &&
+      origin.endsWith('.vercel.app')
+    ) {
+      return callback(null, true);
+    }
+
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 app.use(express.json({ limit: '8mb' })); // increased for base64 logo uploads
 
 // ---------------------------------------------------------------------------
@@ -600,7 +621,7 @@ app.post('/clubs/:id/logo', requireAuth, async (req: AuthenticatedRequest, res) 
     const filename = `${id}.${ext}`;
 
     // Ensure the bucket exists (no-op if already exists)
-    await supabase.storage.createBucket('club-logos', { public: true }).catch(() => {});
+    await supabase.storage.createBucket('club-logos', { public: true }).catch(() => { });
 
     // Upload (upsert so re-uploading replaces the previous logo)
     const { error: uploadError } = await supabase.storage
@@ -774,7 +795,7 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
     if (authErr) {
       const alreadyExists = authErr.message?.toLowerCase().includes('already been registered') ||
-                            authErr.message?.toLowerCase().includes('already registered');
+        authErr.message?.toLowerCase().includes('already registered');
       if (!alreadyExists) {
         await supabase.from('clubs').delete().eq('id', (club as any).id);
         throw authErr;
@@ -1072,7 +1093,7 @@ app.post('/site-settings/upload', requireRoot, async (req: AuthenticatedRequest,
   const safeName = `${Date.now()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}.${ext}`;
 
   try {
-    await supabase.storage.createBucket('mcc-public-assets', { public: true }).catch(() => {});
+    await supabase.storage.createBucket('mcc-public-assets', { public: true }).catch(() => { });
 
     const { error: uploadError } = await supabase.storage
       .from('mcc-public-assets')
