@@ -115,7 +115,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 ## Org Type (Department vs Union)
 `clubs.org_type` column (migration 007): `'union'` (default) | `'department'`. Both map to `club_admin` role — same permission scope (own org only). The root admin is the only superuser. Frontend maps to `Club.orgType` and displays a "Department" / "Union" badge on ClubPage and ClubRoster.
 
-## Current State (last updated 2026-02-26)
+## Current State (last updated 2026-02-27)
 - Backend API is fully functional: caching, ICS generation, auth, mutations, cache-clear endpoint.
 - Frontend is fully wired to the backend — no mock data for clubs or events.
 - Auth flow (login, persist, sign-out, role-gating) is integrated.
@@ -130,6 +130,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - org_type column added to clubs (migration 007) with Department/Union badge in UI.
 - ICS sync cron runs in-process via node-cron (`server/src/cron.ts`), default every 14 min (`*/14 * * * *`), configurable via `SYNC_CRON_SCHEDULE`.
 - `events.manually_edited` (bool, default false): set to `true` by `PATCH /events/:id`. Sync skips overwriting `title`, `description`, `location`, `type_id` for flagged events — only `start_time`, `end_time`, `requires_rsvp`, `rsvp_link` are refreshed.
+- `events.rsvp_note` (text, nullable): free-text note shown to attendees on events requiring RSVP. **Requires DB migration**: `ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_note text;`
 - `eventTypeNames` added to AppContext (fetched from `/event-types`); `selectedEventTypes` initialized to all types on load.
 - FilterSidebar uses live `eventTypeNames` from context (not hardcoded `EVENT_TYPES`).
 - Admin edit modal uses controlled `editingEventType` state for the event type Select (fixes FormData not capturing Radix Select value).
@@ -147,3 +148,8 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - ClubManagement.tsx: add clubs (POST /clubs) + delete clubs (DELETE /clubs/:id, cascades events + user_roles).
 - Logo uploads: `POST /clubs/:id/logo` accepts base64 data URL, uploads to Supabase Storage bucket `club-logos` (auto-created), updates logo_url. Root admin: any club; club_admin: own club only. LogoUpload.tsx shared component used in ClubPage, Admin, and ClubManagement.
 - Express body limit raised to 8mb for logo payloads.
+- RSVP toggle added to all event edit/create modals — standalone switch independent of link. RSVP Note text field shown when toggle is ON. Inline amber warning if toggle ON but no link provided. Backend PATCH/POST accept `requiresRsvp` (bool) and `rsvpNote` (text) fields.
+- Login redirect changed from `/admin` to `/club-management` for MCC admin users.
+- Club names on Club Management page are clickable links navigating to `/club/:id`.
+- "Add Event" button added to Club Management page header (opens full create event modal). "Add Event" button also added to root admin Event Management page header.
+- `EventDetailModal` shows RSVP note, RSVP badge without link (graceful fallback), RSVP link button when available.

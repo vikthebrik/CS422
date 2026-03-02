@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Switch } from '../components/ui/switch';
 import { Textarea } from '../components/ui/textarea';
 import { useApp } from '../context/AppContext';
 import { getUpcomingClubEvents } from '../constants';
@@ -49,6 +50,14 @@ export function Admin() {
   // Confirm dialogs (replaces browser confirm())
   const [deleteEventConfirm, setDeleteEventConfirm] = useState<Event | null>(null);
   const [deleteTypeConfirm, setDeleteTypeConfirm] = useState<EventType | null>(null);
+
+  // RSVP state for edit/create modals
+  const [editingRequiresRsvp, setEditingRequiresRsvp] = useState(false);
+  const [editingRsvpLink, setEditingRsvpLink] = useState('');
+  const [editingRsvpNote, setEditingRsvpNote] = useState('');
+  const [createRequiresRsvp, setCreateRequiresRsvp] = useState(false);
+  const [createRsvpLink, setCreateRsvpLink] = useState('');
+  const [createRsvpNote, setCreateRsvpNote] = useState('');
 
   // Event Types state (root admin only)
   const [eventTypes, setEventTypes] = useState<EventType[]>([]);
@@ -133,6 +142,9 @@ export function Admin() {
   const handleEdit = (event: Event) => {
     setEditingEvent(event);
     setEditingEventType(event.eventType);
+    setEditingRequiresRsvp(event.requiresRsvp ?? false);
+    setEditingRsvpLink(event.rsvpLink ?? '');
+    setEditingRsvpNote(event.rsvpNote ?? '');
     setIsEditModalOpen(true);
   };
 
@@ -157,14 +169,16 @@ export function Admin() {
     if (!editingEvent) return;
     const formData = new FormData(e.currentTarget);
 
-    const rsvpLinkVal = (formData.get('rsvpLink') as string | null) || null;
+    const rsvpLinkVal = editingRsvpLink || null;
+    const rsvpNoteVal = editingRsvpNote || null;
     const eventData: Partial<Event> = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       location: formData.get('location') as string,
       eventType: editingEventType,
       rsvpLink: rsvpLinkVal,
-      requiresRsvp: editingEvent.requiresRsvp || !!rsvpLinkVal,
+      requiresRsvp: editingRequiresRsvp,
+      rsvpNote: rsvpNoteVal,
     };
 
     try {
@@ -174,6 +188,8 @@ export function Admin() {
         location: eventData.location,
         eventType: eventData.eventType,
         rsvpLink: rsvpLinkVal,
+        requiresRsvp: editingRequiresRsvp,
+        rsvpNote: rsvpNoteVal,
       });
       if (!res.ok) {
         const err = await res.json();
@@ -196,7 +212,7 @@ export function Admin() {
     const formData = new FormData(e.currentTarget);
     const startVal = formData.get('startTime') as string;
     const endVal = formData.get('endTime') as string;
-    const rsvpLinkVal = (formData.get('rsvpLink') as string | null) || null;
+    const rsvpLinkVal = createRsvpLink || null;
     const clubIdVal = createClubId || currentUser?.clubId || '';
     if (!clubIdVal) { toast.error('Please select an organization'); return; }
 
@@ -210,6 +226,8 @@ export function Admin() {
         startTime: new Date(startVal).toISOString(),
         endTime: new Date(endVal).toISOString(),
         rsvpLink: rsvpLinkVal,
+        requiresRsvp: createRequiresRsvp,
+        rsvpNote: createRsvpNote || null,
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast.error((data as any).error ?? `Server error (${res.status})`); return; }
@@ -225,13 +243,17 @@ export function Admin() {
         clubId: data.club_id,
         eventType: data.type ?? 'Other',
         color: clubColor,
-        requiresRsvp: data.requires_rsvp ?? false,
+        requiresRsvp: data.requires_rsvp ?? createRequiresRsvp,
         rsvpLink: data.rsvp_link ?? null,
+        rsvpNote: data.rsvp_note ?? null,
       });
       toast.success('Event created');
       setIsCreateModalOpen(false);
       setCreateEventType('');
       setCreateClubId('');
+      setCreateRequiresRsvp(false);
+      setCreateRsvpLink('');
+      setCreateRsvpNote('');
     } catch {
       toast.error('Could not reach the server');
     }
@@ -252,6 +274,9 @@ export function Admin() {
     setDefaultEnd(toLocal(end));
     setCreateClubId(isAdmin ? (clubs[0]?.id ?? '') : (currentUser?.clubId ?? ''));
     setCreateEventType('');
+    setCreateRequiresRsvp(false);
+    setCreateRsvpLink('');
+    setCreateRsvpNote('');
     setIsCreateModalOpen(true);
   };
 
@@ -622,10 +647,46 @@ export function Admin() {
                   <Label htmlFor="location">Location</Label>
                   <Input id="location" name="location" defaultValue={editingEvent.location} required />
                 </div>
-                <div>
-                  <Label htmlFor="rsvpLink">RSVP / Ticket Link</Label>
-                  <Input id="rsvpLink" name="rsvpLink" defaultValue={editingEvent.rsvpLink ?? ''} placeholder="https://..." />
-                  <p className="text-xs text-muted-foreground mt-1">Optional. If set, a ticket button will appear on the event.</p>
+                {/* RSVP Section */}
+                <div className="space-y-3 rounded-lg border border-border p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm font-medium">RSVP Required</Label>
+                      <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                    </div>
+                    <Switch checked={editingRequiresRsvp} onCheckedChange={setEditingRequiresRsvp} />
+                  </div>
+                  {editingRequiresRsvp && (
+                    <>
+                      <div>
+                        <Label htmlFor="edit-rsvpLink">RSVP / Ticket Link</Label>
+                        <Input
+                          id="edit-rsvpLink"
+                          value={editingRsvpLink}
+                          onChange={e => setEditingRsvpLink(e.target.value)}
+                          placeholder="https://..."
+                          className="mt-1"
+                        />
+                        {!editingRsvpLink && (
+                          <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                            <AlertTriangle className="h-3 w-3 shrink-0" />
+                            <span>Add an RSVP link so attendees can register</span>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-rsvpNote">RSVP Note</Label>
+                        <Textarea
+                          id="edit-rsvpNote"
+                          value={editingRsvpNote}
+                          onChange={e => setEditingRsvpNote(e.target.value)}
+                          placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                          rows={2}
+                          className="mt-1"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
@@ -689,10 +750,46 @@ export function Admin() {
                 <Label htmlFor="create-location">Location</Label>
                 <Input id="create-location" name="location" required />
               </div>
-              <div>
-                <Label htmlFor="create-rsvp">RSVP / Ticket Link</Label>
-                <Input id="create-rsvp" name="rsvpLink" placeholder="https://..." />
-                <p className="text-xs text-muted-foreground mt-1">Optional. If set, a ticket button will appear on the event.</p>
+              {/* RSVP Section */}
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">RSVP Required</Label>
+                    <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                  </div>
+                  <Switch checked={createRequiresRsvp} onCheckedChange={setCreateRequiresRsvp} />
+                </div>
+                {createRequiresRsvp && (
+                  <>
+                    <div>
+                      <Label htmlFor="create-rsvpLink">RSVP / Ticket Link</Label>
+                      <Input
+                        id="create-rsvpLink"
+                        value={createRsvpLink}
+                        onChange={e => setCreateRsvpLink(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1"
+                      />
+                      {!createRsvpLink && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          <span>Add an RSVP link so attendees can register</span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="create-rsvpNote">RSVP Note</Label>
+                      <Textarea
+                        id="create-rsvpNote"
+                        value={createRsvpNote}
+                        onChange={e => setCreateRsvpNote(e.target.value)}
+                        placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                        rows={2}
+                        className="mt-1"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>
@@ -729,6 +826,10 @@ export function Admin() {
               Manage Organizations
             </Button>
           )}
+          <Button onClick={openCreateModal}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Event
+          </Button>
         </div>
       </div>
 
@@ -947,10 +1048,46 @@ export function Admin() {
                 <Label htmlFor="location">Location</Label>
                 <Input id="location" name="location" defaultValue={editingEvent.location} required />
               </div>
-              <div>
-                <Label htmlFor="rsvpLink">RSVP / Ticket Link</Label>
-                <Input id="rsvpLink" name="rsvpLink" defaultValue={editingEvent.rsvpLink ?? ''} placeholder="https://..." />
-                <p className="text-xs text-muted-foreground mt-1">Optional. If set, a ticket button will appear on the event.</p>
+              {/* RSVP Section */}
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-medium">RSVP Required</Label>
+                    <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                  </div>
+                  <Switch checked={editingRequiresRsvp} onCheckedChange={setEditingRequiresRsvp} />
+                </div>
+                {editingRequiresRsvp && (
+                  <>
+                    <div>
+                      <Label htmlFor="root-edit-rsvpLink">RSVP / Ticket Link</Label>
+                      <Input
+                        id="root-edit-rsvpLink"
+                        value={editingRsvpLink}
+                        onChange={e => setEditingRsvpLink(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1"
+                      />
+                      {!editingRsvpLink && (
+                        <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          <span>Add an RSVP link so attendees can register</span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="root-edit-rsvpNote">RSVP Note</Label>
+                      <Textarea
+                        id="root-edit-rsvpNote"
+                        value={editingRsvpNote}
+                        onChange={e => setEditingRsvpNote(e.target.value)}
+                        placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                        rows={2}
+                        className="mt-1"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
@@ -1023,10 +1160,46 @@ export function Admin() {
               <Label htmlFor="create-location">Location</Label>
               <Input id="create-location" name="location" required />
             </div>
-            <div>
-              <Label htmlFor="create-rsvp">RSVP / Ticket Link</Label>
-              <Input id="create-rsvp" name="rsvpLink" placeholder="https://..." />
-              <p className="text-xs text-muted-foreground mt-1">Optional. If set, a ticket button will appear on the event.</p>
+            {/* RSVP Section */}
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">RSVP Required</Label>
+                  <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                </div>
+                <Switch checked={createRequiresRsvp} onCheckedChange={setCreateRequiresRsvp} />
+              </div>
+              {createRequiresRsvp && (
+                <>
+                  <div>
+                    <Label htmlFor="root-create-rsvpLink">RSVP / Ticket Link</Label>
+                    <Input
+                      id="root-create-rsvpLink"
+                      value={createRsvpLink}
+                      onChange={e => setCreateRsvpLink(e.target.value)}
+                      placeholder="https://..."
+                      className="mt-1"
+                    />
+                    {!createRsvpLink && (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span>Add an RSVP link so attendees can register</span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="root-create-rsvpNote">RSVP Note</Label>
+                    <Textarea
+                      id="root-create-rsvpNote"
+                      value={createRsvpNote}
+                      onChange={e => setCreateRsvpNote(e.target.value)}
+                      placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>

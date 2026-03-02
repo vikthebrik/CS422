@@ -91,16 +91,31 @@ export function EventDetailModal({ event, open, onOpenChange }: EventDetailModal
           </div>
 
           {/* RSVP / Tickets */}
-          {event.requiresRsvp && event.rsvpLink && (
-            <a
-              href={event.rsvpLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
-            >
-              <Ticket className="h-4 w-4" />
-              Tickets / RSVP
-            </a>
+          {event.requiresRsvp && (
+            <div className="space-y-2">
+              {event.rsvpNote && (
+                <div className="flex items-start gap-2 p-3 rounded-lg bg-muted text-sm">
+                  <Ticket className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <span>{event.rsvpNote}</span>
+                </div>
+              )}
+              {event.rsvpLink ? (
+                <a
+                  href={event.rsvpLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+                >
+                  <Ticket className="h-4 w-4" />
+                  Tickets / RSVP
+                </a>
+              ) : (
+                <div className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-border text-muted-foreground text-sm">
+                  <Ticket className="h-4 w-4" />
+                  RSVP Required — link coming soon
+                </div>
+              )}
+            </div>
           )}
 
           {/* Footer */}

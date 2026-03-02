@@ -10,6 +10,7 @@ export interface Event {
   color?: string;
   requiresRsvp?: boolean;
   rsvpLink?: string | null;
+  rsvpNote?: string | null;
 }
 
 export interface Club {
