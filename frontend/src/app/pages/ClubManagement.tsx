@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -12,6 +13,8 @@ import { Club } from '../types';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 import { LogoUpload } from '../components/LogoUpload';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
+import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import { format } from 'date-fns';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
@@ -31,8 +34,13 @@ interface ApprovalResult {
   password: string;
 }
 
+interface EventType { id: string; name: string; }
+
+const EVENT_TYPES_FALLBACK = ['Events', 'Meetings', 'Office Hours', 'Other'];
+
 export function ClubManagement() {
-  const { clubs, events, authToken, addClub, updateClub, deleteEvent } = useApp();
+  const { clubs, events, authToken, addClub, updateClub, deleteEvent, addEvent } = useApp();
+  const navigate = useNavigate();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Club | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -53,6 +61,19 @@ export function ClubManagement() {
   const [copiedField, setCopiedField] = useState<'email' | 'password' | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [rejectConfirm, setRejectConfirm] = useState<AccountRequest | null>(null);
+  const [clearAllConfirm, setClearAllConfirm] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
+
+  // Create Event state
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [createEventType, setCreateEventType] = useState('');
+  const [createClubId, setCreateClubId] = useState('');
+  const [createRequiresRsvp, setCreateRequiresRsvp] = useState(false);
+  const [createRsvpLink, setCreateRsvpLink] = useState('');
+  const [createRsvpNote, setCreateRsvpNote] = useState('');
+  const [defaultStart, setDefaultStart] = useState('');
+  const [defaultEnd, setDefaultEnd] = useState('');
+  const [eventTypes, setEventTypes] = useState<EventType[]>([]);
 
   const apiCall = useCallback(
     (method: string, path: string, body?: object) =>
@@ -66,6 +87,78 @@ export function ClubManagement() {
       }),
     [authToken]
   );
+
+  useEffect(() => {
+    fetch(`${API_BASE}/event-types`)
+      .then(r => r.json())
+      .then(setEventTypes)
+      .catch(() => {});
+  }, []);
+
+  const openCreateEvent = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    const end = new Date(now);
+    end.setHours(end.getHours() + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toLocal = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setDefaultStart(toLocal(now));
+    setDefaultEnd(toLocal(end));
+    setCreateClubId(clubs[0]?.id ?? '');
+    setCreateEventType('');
+    setCreateRequiresRsvp(false);
+    setCreateRsvpLink('');
+    setCreateRsvpNote('');
+    setIsCreateEventOpen(true);
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const startVal = formData.get('startTime') as string;
+    const endVal = formData.get('endTime') as string;
+    const rsvpLinkVal = createRsvpLink || null;
+    if (!createClubId) { return; }
+
+    try {
+      const res = await apiCall('POST', '/events', {
+        title: formData.get('title') as string,
+        description: formData.get('description') as string,
+        location: formData.get('location') as string,
+        eventType: createEventType || undefined,
+        clubId: createClubId,
+        startTime: new Date(startVal).toISOString(),
+        endTime: new Date(endVal).toISOString(),
+        rsvpLink: rsvpLinkVal,
+        requiresRsvp: createRequiresRsvp,
+        rsvpNote: createRsvpNote || null,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error((data as any).error ?? `Server error (${res.status})`); return; }
+
+      const clubColor = clubs.find(c => c.id === data.club_id)?.color;
+      addEvent({
+        id: data.id,
+        title: data.title,
+        description: data.description ?? '',
+        location: data.location ?? '',
+        startTime: new Date(data.start_time),
+        endTime: new Date(data.end_time),
+        clubId: data.club_id,
+        eventType: data.type ?? 'Other',
+        color: clubColor,
+        requiresRsvp: data.requires_rsvp ?? createRequiresRsvp,
+        rsvpLink: data.rsvp_link ?? null,
+        rsvpNote: data.rsvp_note ?? null,
+      });
+      toast.success('Event created');
+      setIsCreateEventOpen(false);
+    } catch {
+      toast.error('Could not reach the server');
+    }
+  };
 
   useEffect(() => {
     apiCall('GET', '/admin/requests')
@@ -158,6 +251,21 @@ export function ClubManagement() {
     }
   };
 
+  const handleClearAllRequests = async () => {
+    setClearAllConfirm(false);
+    setClearingAll(true);
+    try {
+      const res = await apiCall('DELETE', '/admin/requests');
+      if (!res.ok) { const err = await res.json(); toast.error(err.error ?? 'Failed to clear requests'); return; }
+      setRequests(prev => prev.filter(r => r.status === 'pending'));
+      toast.success('Request history cleared — previous applicants can now reapply');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setClearingAll(false);
+    }
+  };
+
   const copyToClipboard = async (text: string, field: 'email' | 'password') => {
     await navigator.clipboard.writeText(text);
     setCopiedField(field);
@@ -186,7 +294,13 @@ export function ClubManagement() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium text-sm truncate">{club.name}</p>
+          <button
+            type="button"
+            className="font-medium text-sm truncate text-left hover:text-primary hover:underline underline-offset-4 transition-colors block w-full"
+            onClick={() => navigate(`/club/${club.id}`)}
+          >
+            {club.name}
+          </button>
           <p className="text-xs text-muted-foreground">{eventCount} event{eventCount !== 1 ? 's' : ''}</p>
         </div>
         <Button
@@ -216,19 +330,40 @@ export function ClubManagement() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl mb-1">Organization Management</h2>
-        <p className="text-muted-foreground">Add or remove organizations from the platform</p>
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div>
+          <h2 className="text-2xl mb-1">Organization Management</h2>
+          <p className="text-muted-foreground">Add or remove organizations from the platform</p>
+        </div>
+        <Button onClick={openCreateEvent} disabled={clubs.length === 0}>
+          <Plus className="h-4 w-4 mr-2" />
+          Add Event
+        </Button>
       </div>
 
       {/* Join Requests */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            <CardTitle>Join Requests</CardTitle>
-            {pendingRequests.length > 0 && (
-              <Badge className="bg-orange-500 text-white">{pendingRequests.length} pending</Badge>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              <CardTitle>Join Requests</CardTitle>
+              {pendingRequests.length > 0 && (
+                <Badge className="bg-orange-500 text-white">{pendingRequests.length} pending</Badge>
+              )}
+            </div>
+            {historyRequests.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={() => setClearAllConfirm(true)}
+                disabled={clearingAll}
+              >
+                {clearingAll
+                  ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Clearing…</>
+                  : <><Trash2 className="h-3.5 w-3.5 mr-1.5" />Clear History</>}
+              </Button>
             )}
           </div>
           <CardDescription>Organizations requesting to join the platform</CardDescription>
@@ -504,6 +639,31 @@ export function ClubManagement() {
         </Dialog>
       )}
 
+      {/* Clear all requests confirmation dialog */}
+      {clearAllConfirm && (
+        <Dialog open onOpenChange={open => { if (!open) setClearAllConfirm(false); }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
+                  <Trash2 className="h-5 w-5 text-destructive" />
+                </div>
+                <DialogTitle>Clear all requests?</DialogTitle>
+              </div>
+              <DialogDescription>
+                This will permanently delete all {historyRequests.length} processed request{historyRequests.length !== 1 ? 's' : ''} (approved and rejected) from the database. Pending requests will not be affected. Previously rejected applicants will be able to reapply. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setClearAllConfirm(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={handleClearAllRequests}>
+                <Trash2 className="h-4 w-4 mr-2" />Clear All
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Approval credentials dialog */}
       <Dialog open={!!approvalResult} onOpenChange={open => { if (!open) setApprovalResult(null); }}>
         <DialogContent className="max-w-sm">
@@ -550,6 +710,118 @@ export function ClubManagement() {
               <Button className="w-full" onClick={() => setApprovalResult(null)}>Done</Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Event Dialog */}
+      <Dialog open={isCreateEventOpen} onOpenChange={setIsCreateEventOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create Event</DialogTitle>
+            <DialogDescription>Add a new event to the calendar</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateEvent} className="space-y-4">
+            <div>
+              <Label htmlFor="ce-title">Event Title</Label>
+              <Input id="ce-title" name="title" required className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="ce-description">Description</Label>
+              <Textarea id="ce-description" name="description" rows={3} className="mt-1" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Organization</Label>
+                <Select value={createClubId} onValueChange={setCreateClubId}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select organization…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clubs.map(club => (
+                      <SelectItem key={club.id} value={club.id}>{club.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Event Type</Label>
+                <Select value={createEventType} onValueChange={setCreateEventType}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select type…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(eventTypes.length > 0 ? eventTypes.map(et => et.name) : EVENT_TYPES_FALLBACK).map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="ce-start">Start Date & Time</Label>
+                <Input id="ce-start" name="startTime" type="datetime-local" defaultValue={defaultStart} required className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="ce-end">End Date & Time</Label>
+                <Input id="ce-end" name="endTime" type="datetime-local" defaultValue={defaultEnd} required className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="ce-location">Location</Label>
+              <Input id="ce-location" name="location" required className="mt-1" />
+            </div>
+            {/* RSVP Section */}
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">RSVP Required</Label>
+                  <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                </div>
+                <Switch checked={createRequiresRsvp} onCheckedChange={setCreateRequiresRsvp} />
+              </div>
+              {createRequiresRsvp && (
+                <>
+                  <div>
+                    <Label htmlFor="ce-rsvpLink">RSVP / Ticket Link</Label>
+                    <Input
+                      id="ce-rsvpLink"
+                      value={createRsvpLink}
+                      onChange={e => setCreateRsvpLink(e.target.value)}
+                      placeholder="https://..."
+                      className="mt-1"
+                    />
+                    {!createRsvpLink && (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span>Add an RSVP link so attendees can register</span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="ce-rsvpNote">RSVP Note</Label>
+                    <Textarea
+                      id="ce-rsvpNote"
+                      value={createRsvpNote}
+                      onChange={e => setCreateRsvpNote(e.target.value)}
+                      placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsCreateEventOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-primary" disabled={!createClubId}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Create Event
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

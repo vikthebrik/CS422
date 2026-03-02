@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Users, Plus, Clock, Check, X, Calendar, Building2, ExternalLink } from 'lucide-react';
+import { Users, Plus, Clock, Check, X, Calendar, Building2, ExternalLink, HardHat } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
@@ -92,6 +92,17 @@ export function Collab() {
 
   return (
     <div className="space-y-6">
+      {/* Under Construction Banner */}
+      <div className="flex items-start gap-3 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-amber-800 dark:text-amber-300">
+        <HardHat className="h-5 w-5 mt-0.5 shrink-0" />
+        <div>
+          <p className="font-medium leading-snug">Work in Progress</p>
+          <p className="text-sm opacity-80 mt-0.5">
+            The collaborations feature is under active development. Proposals and approvals are not yet connected to the backend — changes made here won't be saved.
+          </p>
+        </div>
+      </div>
+
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
           <h2 className="text-2xl mb-1">

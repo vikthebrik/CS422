@@ -50,7 +50,11 @@ export function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
       onOpenChange(false);
       setEmail('');
       setPassword('');
-      navigate('/admin');
+      if (data.user.role === 'club_officer' && data.user.clubId) {
+        navigate(`/club/${data.user.clubId}`);
+      } else {
+        navigate('/club-management');
+      }
     } catch {
       toast.error('Could not reach the server. Is it running?');
     } finally {

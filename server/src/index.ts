@@ -263,12 +263,14 @@ app.get('/events', async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { title, description, location, eventType, rsvpLink } = req.body as {
+  const { title, description, location, eventType, rsvpLink, requiresRsvp, rsvpNote } = req.body as {
     title?: string;
     description?: string;
     location?: string;
     eventType?: string;
     rsvpLink?: string | null;
+    requiresRsvp?: boolean;
+    rsvpNote?: string | null;
   };
 
   try {
@@ -305,6 +307,8 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
       updates.rsvp_link = rsvpLink || null;
       if (rsvpLink) updates.requires_rsvp = true;
     }
+    if (requiresRsvp !== undefined) updates.requires_rsvp = requiresRsvp;
+    if (rsvpNote !== undefined) updates.rsvp_note = rsvpNote || null;
 
     const { data, error } = await supabase
       .from('events')
@@ -331,7 +335,7 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
 // POST /events — create a new event (auth required, manually_edited = true)
 // ---------------------------------------------------------------------------
 app.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
-  const { title, description, location, eventType, clubId, startTime, endTime, rsvpLink } = req.body;
+  const { title, description, location, eventType, clubId, startTime, endTime, rsvpLink, requiresRsvp, rsvpNote } = req.body;
 
   if (!title || !clubId || !startTime || !endTime) {
     return res.status(400).json({ error: 'title, clubId, startTime, and endTime are required' });
@@ -367,8 +371,9 @@ app.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
         start_time: startTime,
         end_time: endTime,
         manually_edited: true,
-        requires_rsvp: !!rsvpLink || /\b(ticket|rsvp)\b/i.test(description ?? ''),
+        requires_rsvp: requiresRsvp ?? (!!rsvpLink || /\b(ticket|rsvp)\b/i.test(description ?? '')),
         rsvp_link: rsvpLink || null,
+        rsvp_note: rsvpNote || null,
       })
       .select(`*, clubs(name, logo_url), event_types(name)`)
       .single();
@@ -729,6 +734,20 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
   const clubName = (request as any).club_name as string;
   const email = (request as any).contact_email as string;
+
+  // Guard: reject if a club with this name is already registered
+  const { data: existingClub } = await supabase
+    .from('clubs')
+    .select('id')
+    .ilike('name', clubName)
+    .maybeSingle();
+
+  if (existingClub) {
+    return res.status(400).json({
+      error: `"${clubName}" is already a registered organization on the platform.`,
+    });
+  }
+
   // Generate a simple memorable password
   const password =
     Math.random().toString(36).slice(2, 8) +
@@ -745,19 +764,37 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
     if (clubErr || !club) throw clubErr ?? new Error('Failed to create club');
 
-    // 2. Create auth user
+    // 2. Resolve auth user — create fresh, or reuse an orphaned one (no user_role) if already registered
+    let userId: string;
     const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     });
 
-    if (authErr || !authData?.user) {
+    if (authErr) {
+      const alreadyExists = authErr.message?.toLowerCase().includes('already been registered') ||
+                            authErr.message?.toLowerCase().includes('already registered');
+      if (!alreadyExists) {
+        await supabase.from('clubs').delete().eq('id', (club as any).id);
+        throw authErr;
+      }
+      // Orphaned auth user (exists in Supabase but has no user_role).
+      // Find them by listing users and reset their password so fresh credentials are issued.
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const orphan = listData?.users?.find((u: any) => u.email === email);
+      if (!orphan) {
+        await supabase.from('clubs').delete().eq('id', (club as any).id);
+        throw new Error('Auth user exists but could not be retrieved — please manually remove it in Supabase Auth before approving.');
+      }
+      userId = orphan.id;
+      await supabase.auth.admin.updateUserById(userId, { password });
+    } else if (!authData?.user) {
       await supabase.from('clubs').delete().eq('id', (club as any).id);
-      throw authErr ?? new Error('Failed to create auth user');
+      throw new Error('Failed to create auth user');
+    } else {
+      userId = authData.user.id;
     }
-
-    const userId = authData.user.id;
 
     // 3. Insert user_role (without raw_password first, in case column doesn't exist yet)
     const { error: roleErr } = await supabase.from('user_roles').insert({
@@ -796,6 +833,19 @@ app.post('/admin/requests/:id/reject', requireRoot, async (req: AuthenticatedReq
     .update({ status: 'rejected' })
     .eq('id', req.params.id as string);
 
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/requests — clear history (approved + rejected) requests (root only)
+// Preserves pending requests. Allows previously rejected applicants to reapply.
+// ---------------------------------------------------------------------------
+app.delete('/admin/requests', requireRoot, async (_req, res) => {
+  const { error } = await supabase
+    .from('account_requests')
+    .delete()
+    .in('status', ['approved', 'rejected']);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ status: 'ok' });
 });

@@ -11,6 +11,8 @@ interface AppContextType {
   clubs: Club[];
   currentUser: User | null;
   authToken: string | null;
+  /** True once the initial token-validation fetch has resolved (or if there was no stored token). */
+  authReady: boolean;
   selectedClubs: string[];
   selectedEventTypes: string[];
   /** Live event type names fetched from /event-types */
@@ -62,6 +64,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [authToken, setAuthTokenState] = useState<string | null>(
     () => localStorage.getItem(TOKEN_KEY)
   );
+  // False only while we're validating a stored token on mount; prevents premature redirects
+  const [authReady, setAuthReady] = useState(() => !localStorage.getItem(TOKEN_KEY));
 
   const setAuthToken = (token: string | null) => {
     if (token) {
@@ -83,11 +87,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (user) {
           setCurrentUser(user);
         } else {
-          // Token is invalid or expired — clear it
           setAuthToken(null);
         }
       })
-      .catch(() => setAuthToken(null));
+      .catch(() => setAuthToken(null))
+      .finally(() => setAuthReady(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only on mount
 
@@ -144,6 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         clubs,
         currentUser,
         authToken,
+        authReady,
         selectedClubs,
         selectedEventTypes,
         eventTypeNames,
