@@ -28,9 +28,9 @@ const DEFAULT_BLOCKS: Block[] = [
 ];
 
 const BLOCK_META = [
-  { type: 'text' as const,  label: 'Text',          icon: '📝', desc: 'Paragraph with optional title' },
-  { type: 'media' as const, label: 'Media',         icon: '🖼️', desc: 'Image or video' },
-  { type: 'links' as const, label: 'Links',         icon: '🔗', desc: 'Grid of external links' },
+  { type: 'text' as const, label: 'Text', icon: '📝', desc: 'Paragraph with optional title' },
+  { type: 'media' as const, label: 'Media', icon: '🖼️', desc: 'Image or video' },
+  { type: 'links' as const, label: 'Links', icon: '🔗', desc: 'Grid of external links' },
   { type: 'clubs' as const, label: 'Organizations', icon: '🏛️', desc: 'Affiliated club showcase' },
 ];
 
@@ -40,7 +40,7 @@ function genId() {
 
 function makeDefaultBlock(type: Block['type']): Block {
   switch (type) {
-    case 'text':  return { id: genId(), type: 'text', title: '', content: '' };
+    case 'text': return { id: genId(), type: 'text', title: '', content: '' };
     case 'media': return { id: genId(), type: 'media', mediaType: 'image', url: '', caption: '' };
     case 'links': return { id: genId(), type: 'links', title: '', links: [{ label: '', url: '', description: '' }] };
     case 'clubs': return { id: genId(), type: 'clubs', title: '', clubIds: [] };
@@ -163,7 +163,7 @@ function ClubsRenderer({ block, clubs }: { block: ClubShowcaseBlock; clubs: Retu
 
 function BlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeof useApp>['clubs'] }) {
   switch (block.type) {
-    case 'text':  return <TextRenderer block={block} />;
+    case 'text': return <TextRenderer block={block} />;
     case 'media': return <MediaRenderer block={block} />;
     case 'links': return <LinksRenderer block={block} />;
     case 'clubs': return <ClubsRenderer block={block} clubs={clubs} />;
@@ -173,6 +173,43 @@ function BlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeo
 // ---------------------------------------------------------------------------
 // Block editor form (inside Dialog)
 // ---------------------------------------------------------------------------
+
+/**
+ * Scales an image down client-side using a canvas.
+ * Preserves aspect ratio up to the specified max width/height.
+ * Uses WebP encoding at 80% quality for optimal file size.
+ */
+function downscaleImage(file: File, maxWidth = 1920, maxHeight = 1080): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/webp', 0.8));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 function BlockEditForm({
   draft,
@@ -188,14 +225,19 @@ function BlockEditForm({
   const [preview, setPreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
     if (file.size > 8 * 1024 * 1024) { toast.error('Image must be under 8 MB'); return; }
-    const reader = new FileReader();
-    reader.onload = () => setPreview(reader.result as string);
-    reader.readAsDataURL(file);
+
+    try {
+      const downscaled = await downscaleImage(file, 1920, 1080);
+      setPreview(downscaled);
+    } catch (err) {
+      console.error('Error downscaling image:', err);
+      toast.error('Failed to process image');
+    }
   };
 
   const handleUpload = async () => {

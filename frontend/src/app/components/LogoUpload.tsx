@@ -8,6 +8,46 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
 const MAX_SIZE_MB = 5;
 
 /**
+ * Scales an image down client-side using a canvas.
+ * Preserves aspect ratio up to the specified max width/height.
+ * Uses WebP encoding at 80% quality for optimal file size.
+ */
+function downscaleImage(file: File, maxWidth = 400, maxHeight = 400): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+
+        // Use better interpolation if supported (Chrome/Safari)
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Export as WebP for smaller payloads to the backend
+        resolve(canvas.toDataURL('image/webp', 0.8));
+      };
+      img.onerror = reject;
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
  * Samples a downscaled version of the image on a canvas and returns
  * the average non-white, non-black, non-transparent pixel color as a hex string.
  * Skips pixels that are near-white (likely backgrounds) or near-black.
@@ -56,7 +96,7 @@ export function LogoUpload({ clubId, currentLogo, clubColor, clubInitials, authT
   const [extractedColor, setExtractedColor] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -69,14 +109,15 @@ export function LogoUpload({ clubId, currentLogo, clubColor, clubInitials, authT
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
-      setPreview(dataUrl);
-      const color = await extractDominantColor(dataUrl);
+    try {
+      const downscaledDataUrl = await downscaleImage(file);
+      setPreview(downscaledDataUrl);
+      const color = await extractDominantColor(downscaledDataUrl);
       setExtractedColor(color);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error processing image:', err);
+      toast.error('Failed to process image');
+    }
   };
 
   const handleUpload = async () => {
