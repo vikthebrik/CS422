@@ -104,10 +104,13 @@ export function EventDetailModal({ event, open, onOpenChange }: EventDetailModal
                   href={event.rsvpLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+                  className="flex flex-col items-center justify-center gap-0.5 w-full px-4 py-2.5 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
                 >
-                  <Ticket className="h-4 w-4" />
-                  Tickets / RSVP
+                  <span className="flex items-center gap-2">
+                    <Ticket className="h-4 w-4" />
+                    Tickets / RSVP
+                  </span>
+                  <span className="text-xs font-normal opacity-80">Click here to register</span>
                 </a>
               ) : (
                 <div className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-border text-muted-foreground text-sm">

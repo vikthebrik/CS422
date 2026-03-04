@@ -120,7 +120,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 ## Org Type (Department vs Union)
 `clubs.org_type` column (migration 007): `'union'` (default) | `'department'`. Both map to `club_admin` role — same permission scope (own org only). The root admin is the only superuser. Frontend maps to `Club.orgType` and displays a "Department" / "Union" badge on ClubPage and ClubRoster.
 
-## Current State (last updated 2026-02-27)
+## Current State (last updated 2026-03-02)
 - Backend API is fully functional: caching, ICS generation, auth, mutations, cache-clear endpoint.
 - Frontend is fully wired to the backend — no mock data for clubs or events.
 - Auth flow (login, persist, sign-out, role-gating) is integrated.
@@ -161,3 +161,8 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - Club names on Club Management page are clickable links navigating to `/club/:id`.
 - "Add Event" button added to Club Management page header (opens full create event modal). "Add Event" button also added to root admin Event Management page header.
 - `EventDetailModal` shows RSVP note, RSVP badge without link (graceful fallback), RSVP link button when available.
+- "Our Team" section on each ClubPage: `club_members` table (migration 014) with `section` (exec/board/intern), `name`, `title`, `email`, `photo_url`, `sort_order`. Public `GET /clubs/:id/members`; auth-gated POST/PATCH/DELETE/photo-upload. `OurTeam.tsx` component handles all CRUD inline with dialogs. Email is clickable to copy. Photos uploaded to `member-photos` Supabase bucket (max 300px, WebP). Editable by root and own club_admin. **Requires running migration 014_club_members.sql in Supabase.**
+- Account approval emails: `POST /admin/requests/:id/approve` now sends the club admin's login credentials to their contact email via SMTP (nodemailer). Gracefully skips if SMTP_HOST env var is not set. New env vars: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
+- Change password: `POST /auth/change-password { currentPassword, newPassword }` (requires auth). Verifies current password via sign-in, updates via admin API, updates `user_roles.raw_password`. Auth middleware now exposes `req.userEmail`.
+- `ChangePassword.tsx` page at `/change-password` (any authenticated user). Accessible via the key icon in NavigationBar (visible to all logged-in users).
+- Password reset flow (forgot-password) works for both hash-based tokens (implicit flow) and query param token_hash (PKCE flow).

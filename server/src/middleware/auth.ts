@@ -3,6 +3,7 @@ import { supabase } from '../db/supabase';
 
 export interface AuthenticatedRequest extends Request {
     userId?: string;
+    userEmail?: string;
     userRole?: string;
     userClubId?: string | null;
 }
@@ -32,6 +33,7 @@ export const requireAuth = async (req: AuthenticatedRequest, res: Response, next
     }
 
     req.userId = user.id;
+    req.userEmail = user.email ?? '';
     req.userRole = roleRow.role;
     req.userClubId = roleRow.club_id ?? null;
 

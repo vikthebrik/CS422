@@ -13,6 +13,7 @@ import { ClubManagement } from './pages/ClubManagement';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { RequestAccount } from './pages/RequestAccount';
+import { ChangePassword } from './pages/ChangePassword';
 
 const router = createBrowserRouter([
   {
@@ -34,6 +35,7 @@ const router = createBrowserRouter([
         element: <ProtectedRoute />,
         children: [
           { path: "collab", Component: Collab },
+          { path: "change-password", Component: ChangePassword },
         ],
       },
 

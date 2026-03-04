@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
-import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -12,21 +12,33 @@ import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
+import { Switch } from '../components/ui/switch';
 import { LogoUpload } from '../components/LogoUpload';
+import { OurTeam } from '../components/OurTeam';
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Event } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE = '/api';
 
 export function ClubPage() {
   const { clubId } = useParams();
-  const { clubs, events, currentUser, authToken, updateClub, eventTypeNames } = useApp();
+  const { clubs, events, currentUser, authToken, updateClub, addEvent, eventTypeNames } = useApp();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
   const [selectedType, setSelectedType] = useState('all');
   const [showPast, setShowPast] = useState(false);
+
+  // Create event state
+  const [isCreateEventOpen, setIsCreateEventOpen] = useState(false);
+  const [createEventType, setCreateEventType] = useState('');
+  const [createClubId, setCreateClubId] = useState('');
+  const [createRequiresRsvp, setCreateRequiresRsvp] = useState(false);
+  const [createRsvpLink, setCreateRsvpLink] = useState('');
+  const [createRsvpNote, setCreateRsvpNote] = useState('');
+  const [defaultStart, setDefaultStart] = useState('');
+  const [defaultEnd, setDefaultEnd] = useState('');
 
   const club = clubs.find(c => c.id === clubId);
   const allUpcoming = clubId ? getUpcomingClubEvents(events, clubId) : [];
@@ -50,6 +62,77 @@ export function ClubPage() {
   const pastEvents = useMemo(() => filterEvents(allPast), [allPast, selectedType, localSearch]);
 
   const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === clubId);
+
+  const openCreateEvent = () => {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    const end = new Date(now);
+    end.setHours(end.getHours() + 1);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toLocal = (d: Date) =>
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    setDefaultStart(toLocal(now));
+    setDefaultEnd(toLocal(end));
+    setCreateClubId(clubId ?? '');
+    setCreateEventType('');
+    setCreateRequiresRsvp(false);
+    setCreateRsvpLink('');
+    setCreateRsvpNote('');
+    setIsCreateEventOpen(true);
+  };
+
+  const handleCreateEvent = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const startVal = formData.get('startTime') as string;
+    const endVal = formData.get('endTime') as string;
+    if (!createClubId) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/events`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
+        body: JSON.stringify({
+          title: formData.get('title') as string,
+          description: formData.get('description') as string,
+          location: formData.get('location') as string,
+          eventType: createEventType || undefined,
+          clubId: createClubId,
+          startTime: new Date(startVal).toISOString(),
+          endTime: new Date(endVal).toISOString(),
+          rsvpLink: createRsvpLink || null,
+          requiresRsvp: createRequiresRsvp,
+          rsvpNote: createRsvpNote || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast.error((data as any).error ?? `Server error (${res.status})`); return; }
+
+      const clubColor = clubs.find(c => c.id === data.club_id)?.color;
+      addEvent({
+        id: data.id,
+        title: data.title,
+        description: data.description ?? '',
+        location: data.location ?? '',
+        startTime: new Date(data.start_time),
+        endTime: new Date(data.end_time),
+        clubId: data.club_id,
+        eventType: data.type ?? 'Other',
+        color: clubColor,
+        requiresRsvp: data.requires_rsvp ?? createRequiresRsvp,
+        rsvpLink: data.rsvp_link ?? null,
+        rsvpNote: data.rsvp_note ?? null,
+      });
+      toast.success('Event created');
+      setIsCreateEventOpen(false);
+    } catch {
+      toast.error('Could not reach the server');
+    }
+  };
 
   if (!club) {
     return (
@@ -136,7 +219,7 @@ export function ClubPage() {
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground font-medium hover:opacity-90"
               >
                 <Ticket className="h-3 w-3" />
-                Tickets / RSVP
+                Tickets / RSVP — click here
               </a>
             )}
           </div>
@@ -241,6 +324,12 @@ export function ClubPage() {
               <CardDescription>Events hosted by {club.name}</CardDescription>
             </div>
             <div className="flex items-center gap-2">
+              {canEdit && (
+                <Button size="sm" className="bg-primary" onClick={openCreateEvent}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Event
+                </Button>
+              )}
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <Input
@@ -306,6 +395,26 @@ export function ClubPage() {
         </CardContent>
       </Card>
 
+      {/* Our Team */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Our Team</CardTitle>
+              <CardDescription>Meet the people behind {club.name}</CardDescription>
+            </div>
+            {canEdit && (
+              <Badge variant="outline" className="text-xs">
+                Click a section's Add button to manage members
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          <OurTeam clubId={club.id} canEdit={!!canEdit} authToken={authToken} />
+        </CardContent>
+      </Card>
+
       {/* Edit Club Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent className="max-w-2xl">
@@ -368,6 +477,120 @@ export function ClubPage() {
               </Button>
               <Button type="submit" className="bg-primary">
                 Save Changes
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Event Dialog */}
+      <Dialog open={isCreateEventOpen} onOpenChange={setIsCreateEventOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Create Event</DialogTitle>
+            <DialogDescription>Add a new event to the calendar</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateEvent} className="space-y-4">
+            <div>
+              <Label htmlFor="ce-title">Event Title</Label>
+              <Input id="ce-title" name="title" required className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="ce-description">Description</Label>
+              <Textarea id="ce-description" name="description" rows={3} className="mt-1" />
+            </div>
+            <div className={`grid gap-4 ${currentUser?.role === 'admin' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+              {currentUser?.role === 'admin' && (
+                <div>
+                  <Label>Organization</Label>
+                  <Select value={createClubId} onValueChange={setCreateClubId}>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Select organization…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clubs.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              <div>
+                <Label>Event Type</Label>
+                <Select value={createEventType} onValueChange={setCreateEventType}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select type…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {eventTypeNames.map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="ce-start">Start Date & Time</Label>
+                <Input id="ce-start" name="startTime" type="datetime-local" defaultValue={defaultStart} required className="mt-1" />
+              </div>
+              <div>
+                <Label htmlFor="ce-end">End Date & Time</Label>
+                <Input id="ce-end" name="endTime" type="datetime-local" defaultValue={defaultEnd} required className="mt-1" />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="ce-location">Location</Label>
+              <Input id="ce-location" name="location" required className="mt-1" />
+            </div>
+            {/* RSVP Section */}
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-medium">RSVP Required</Label>
+                  <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+                </div>
+                <Switch checked={createRequiresRsvp} onCheckedChange={setCreateRequiresRsvp} />
+              </div>
+              {createRequiresRsvp && (
+                <>
+                  <div>
+                    <Label htmlFor="ce-rsvpLink">RSVP / Ticket Link</Label>
+                    <Input
+                      id="ce-rsvpLink"
+                      value={createRsvpLink}
+                      onChange={e => setCreateRsvpLink(e.target.value)}
+                      placeholder="https://..."
+                      className="mt-1"
+                    />
+                    {!createRsvpLink && (
+                      <div className="flex items-center gap-1.5 mt-1.5 text-amber-600 dark:text-amber-400 text-xs">
+                        <AlertTriangle className="h-3 w-3 shrink-0" />
+                        <span>Add an RSVP link so attendees can register</span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <Label htmlFor="ce-rsvpNote">RSVP Note</Label>
+                    <Textarea
+                      id="ce-rsvpNote"
+                      value={createRsvpNote}
+                      onChange={e => setCreateRsvpNote(e.target.value)}
+                      placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsCreateEventOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" className="bg-primary" disabled={!createClubId}>
+                <Calendar className="h-4 w-4 mr-2" />
+                Create Event
               </Button>
             </div>
           </form>

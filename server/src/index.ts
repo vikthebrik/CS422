@@ -1,10 +1,46 @@
 import express from 'express';
 import cors from 'cors';
+import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
 import { requireAuth, requireRoot, AuthenticatedRequest } from './middleware/auth';
 import { startCron } from './cron';
+
+// ---------------------------------------------------------------------------
+// Mailer — optional SMTP. If SMTP_HOST is not set, sendMail is a no-op.
+// ---------------------------------------------------------------------------
+function makeTransporter() {
+  if (!process.env.SMTP_HOST) return null;
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: Number(process.env.SMTP_PORT ?? 587) === 465,
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+}
+
+async function sendMail(to: string, subject: string, html: string) {
+  const transporter = makeTransporter();
+  if (!transporter) {
+    console.warn('[mailer] SMTP_HOST not set — skipping email to', to);
+    return;
+  }
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+      to,
+      subject,
+      html,
+    });
+    console.log('[mailer] Sent email to', to);
+  } catch (err: any) {
+    console.error('[mailer] Failed to send email to', to, '—', err.message);
+  }
+}
 
 // Creates a throwaway Supabase client for signInWithPassword so the shared
 // service-role client's session is never polluted by user auth state.
@@ -159,10 +195,15 @@ app.post('/auth/forgot-password', async (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// POST /auth/reset-password  { token, newPassword }
+// POST /auth/reset-password  { token, tokenType, newPassword }
 // Validates the recovery token from the email link and updates the password.
+// tokenType: 'access_token' (implicit flow, from URL hash) | 'token_hash' (PKCE flow, from query string)
 app.post('/auth/reset-password', async (req, res) => {
-  const { token, newPassword } = req.body as { token?: string; newPassword?: string };
+  const { token, tokenType = 'access_token', newPassword } = req.body as {
+    token?: string;
+    tokenType?: 'access_token' | 'token_hash';
+    newPassword?: string;
+  };
   if (!token || !newPassword) {
     return res.status(400).json({ error: 'token and newPassword are required' });
   }
@@ -170,16 +211,72 @@ app.post('/auth/reset-password', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 8 characters' });
   }
 
-  // Verify the token and get the user identity
-  const { data: { user }, error: tokenError } = await supabase.auth.getUser(token);
-  if (tokenError || !user) {
-    return res.status(401).json({ error: 'Invalid or expired reset token' });
+  let userId: string;
+
+  if (tokenType === 'token_hash') {
+    // PKCE flow: exchange token_hash for a session to verify identity
+    const { data, error: otpError } = await supabase.auth.verifyOtp({
+      token_hash: token,
+      type: 'recovery',
+    });
+    if (otpError || !data.user) {
+      return res.status(401).json({ error: 'Invalid or expired reset token' });
+    }
+    userId = data.user.id;
+  } else {
+    // Implicit flow: access_token directly from URL hash
+    const { data: { user }, error: tokenError } = await supabase.auth.getUser(token);
+    if (tokenError || !user) {
+      return res.status(401).json({ error: 'Invalid or expired reset token' });
+    }
+    userId = user.id;
   }
 
-  const { error: updateError } = await supabase.auth.admin.updateUserById(user.id, {
+  const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
     password: newPassword,
   });
   if (updateError) return res.status(500).json({ error: updateError.message });
+
+  res.json({ status: 'ok' });
+});
+
+// POST /auth/change-password  { currentPassword, newPassword }
+// Requires a valid JWT. Verifies the current password then updates to the new one.
+app.post('/auth/change-password', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { currentPassword, newPassword } = req.body as {
+    currentPassword?: string;
+    newPassword?: string;
+  };
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'currentPassword and newPassword are required' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  if (currentPassword === newPassword) {
+    return res.status(400).json({ error: 'New password must differ from the current one' });
+  }
+
+  const userId = req.userId!;
+  const email = req.userEmail!;
+
+  // Verify the current password by attempting a sign-in
+  const { error: signInErr } = await makeAuthClient().auth.signInWithPassword({
+    email,
+    password: currentPassword,
+  });
+  if (signInErr) {
+    return res.status(401).json({ error: 'Current password is incorrect' });
+  }
+
+  // Update password via admin API
+  const { error: updateErr } = await supabase.auth.admin.updateUserById(userId, {
+    password: newPassword,
+  });
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  // Persist plaintext for admin visibility (best-effort)
+  await supabase.from('user_roles').update({ raw_password: newPassword }).eq('user_id', userId);
 
   res.json({ status: 'ok' });
 });
@@ -849,6 +946,38 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
     clearCacheKey('clubs:all');
 
+    // 6. Email the new club admin their login credentials (best-effort)
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    await sendMail(
+      email,
+      `Your MCC Calendar Hub account is ready — ${(club as any).name}`,
+      `
+        <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+          <h2 style="color:#1d4ed8">Welcome to MCC Calendar Hub!</h2>
+          <p>Your organization <strong>${(club as any).name}</strong> has been approved.
+             You can now log in and manage your club's events.</p>
+          <table style="border-collapse:collapse;width:100%;margin:16px 0">
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:40%">Email</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${email}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600">Temporary Password</td>
+              <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${password}</td>
+            </tr>
+          </table>
+          <p style="color:#6b7280;font-size:13px">
+            For security, please change your password after your first login using the
+            <strong>Change Password</strong> option in the navigation bar.
+          </p>
+          <a href="${frontendUrl}"
+             style="display:inline-block;background:#1d4ed8;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:8px">
+            Go to MCC Calendar Hub
+          </a>
+        </div>
+      `,
+    );
+
     res.json({ clubId: (club as any).id, clubName: (club as any).name, email, password });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? 'Approval failed' });
@@ -1118,6 +1247,130 @@ app.post('/site-settings/upload', requireRoot, async (req: AuthenticatedRequest,
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Club Members — GET / POST / PATCH / DELETE / photo upload
+// Table: club_members (id, club_id, section, name, title, email, photo_url, sort_order)
+// ---------------------------------------------------------------------------
+
+// GET /clubs/:id/members — public
+app.get('/clubs/:id/members', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('club_members')
+    .select('id, section, name, title, email, photo_url, sort_order')
+    .eq('club_id', id)
+    .order('section')
+    .order('sort_order')
+    .order('created_at');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data ?? []);
+});
+
+// POST /clubs/:id/members  { section, name, title, email?, sort_order? }
+app.post('/clubs/:id/members', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club members' });
+  }
+  const { section, name, title, email, sort_order } = req.body as {
+    section?: string; name?: string; title?: string; email?: string; sort_order?: number;
+  };
+  if (!section || !name || !title) {
+    return res.status(400).json({ error: 'section, name, and title are required' });
+  }
+  if (!['exec', 'board', 'intern'].includes(section)) {
+    return res.status(400).json({ error: 'section must be exec, board, or intern' });
+  }
+  const { data, error } = await supabase
+    .from('club_members')
+    .insert({ club_id: id, section, name, title, email: email ?? null, sort_order: sort_order ?? 0 })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+// PATCH /clubs/:id/members/:memberId  { section?, name?, title?, email?, sort_order? }
+app.patch('/clubs/:id/members/:memberId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, memberId } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club members' });
+  }
+  const { section, name, title, email, sort_order } = req.body as {
+    section?: string; name?: string; title?: string; email?: string | null; sort_order?: number;
+  };
+  if (section && !['exec', 'board', 'intern'].includes(section)) {
+    return res.status(400).json({ error: 'section must be exec, board, or intern' });
+  }
+  const updates: Record<string, any> = {};
+  if (section !== undefined) updates.section = section;
+  if (name !== undefined) updates.name = name;
+  if (title !== undefined) updates.title = title;
+  if (email !== undefined) updates.email = email || null;
+  if (sort_order !== undefined) updates.sort_order = sort_order;
+
+  const { data, error } = await supabase
+    .from('club_members')
+    .update(updates)
+    .eq('id', memberId)
+    .eq('club_id', id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Member not found' });
+  res.json(data);
+});
+
+// DELETE /clubs/:id/members/:memberId
+app.delete('/clubs/:id/members/:memberId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, memberId } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club members' });
+  }
+  const { error } = await supabase
+    .from('club_members')
+    .delete()
+    .eq('id', memberId)
+    .eq('club_id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
+});
+
+// POST /clubs/:id/members/:memberId/photo  { photo: "data:<mime>;base64,<data>" }
+app.post('/clubs/:id/members/:memberId/photo', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, memberId } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club members' });
+  }
+  const { photo } = req.body as { photo?: string };
+  if (!photo) return res.status(400).json({ error: 'photo is required' });
+
+  const match = photo.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+  if (!match) return res.status(400).json({ error: 'Invalid image data URL' });
+  const [, contentType, base64Data] = match;
+  const ext = contentType.split('/')[1].replace('+xml', '');
+  const buffer = Buffer.from(base64Data, 'base64');
+  const filename = `${memberId}.${ext}`;
+
+  await supabase.storage.createBucket('member-photos', { public: true }).catch(() => {});
+  const { error: uploadError } = await supabase.storage
+    .from('member-photos')
+    .upload(filename, buffer, { contentType, upsert: true });
+  if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+  const { data: { publicUrl } } = supabase.storage.from('member-photos').getPublicUrl(filename);
+
+  const { data, error: updateError } = await supabase
+    .from('club_members')
+    .update({ photo_url: publicUrl })
+    .eq('id', memberId)
+    .eq('club_id', id)
+    .select()
+    .single();
+  if (updateError) return res.status(500).json({ error: updateError.message });
+  res.json({ photo_url: publicUrl, member: data });
 });
 
 // ---------------------------------------------------------------------------

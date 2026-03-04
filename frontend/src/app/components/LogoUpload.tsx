@@ -1,10 +1,11 @@
+/// <reference types="vite/client" />
 import { useState, useRef } from 'react';
 import { Upload, RefreshCw, ImageIcon } from 'lucide-react';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE = '/api';
 const MAX_SIZE_MB = 5;
 
 /**

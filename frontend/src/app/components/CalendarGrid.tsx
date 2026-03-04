@@ -360,10 +360,16 @@ export function CalendarGrid({
                                   </p>
                                   {event.requiresRsvp && event.rsvpLink && (
                                     <div className="pt-1 border-t border-white/20">
-                                      <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300">
+                                      <a
+                                        href={event.rsvpLink}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={e => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300 hover:text-yellow-100 underline underline-offset-2"
+                                      >
                                         <Ticket className="h-3 w-3" />
-                                        Tickets / RSVP required
-                                      </span>
+                                        Tickets / RSVP — click here
+                                      </a>
                                     </div>
                                   )}
                                 </div>
@@ -493,10 +499,16 @@ export function CalendarGrid({
                                     </p>
                                     {event.requiresRsvp && event.rsvpLink && (
                                       <div className="pt-1 border-t border-white/20">
-                                        <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300">
+                                        <a
+                                          href={event.rsvpLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          onClick={e => e.stopPropagation()}
+                                          className="inline-flex items-center gap-1 text-xs font-medium text-yellow-300 hover:text-yellow-100 underline underline-offset-2"
+                                        >
                                           <Ticket className="h-3 w-3" />
-                                          Tickets / RSVP required
-                                        </span>
+                                          Tickets / RSVP — click here
+                                        </a>
                                       </div>
                                     )}
                                   </div>
@@ -598,7 +610,7 @@ export function CalendarGrid({
                                     className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:opacity-90"
                                   >
                                     <Ticket className="h-3 w-3" />
-                                    Tickets / RSVP
+                                    Tickets / RSVP — click here
                                   </a>
                                 )}
                               </div>

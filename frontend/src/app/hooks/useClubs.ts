@@ -56,7 +56,7 @@ export function useClubs(): UseClubsResult {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+    const baseUrl = '/api';
 
     fetch(`${baseUrl}/clubs`)
       .then(res => {

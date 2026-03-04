@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Settings, Pencil, Trash2, ChevronUp, ChevronDown, Plus, X,
@@ -15,7 +16,7 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE = '/api';
 const SETTINGS_KEY = 'about-page';
 
 const DEFAULT_BLOCKS: Block[] = [

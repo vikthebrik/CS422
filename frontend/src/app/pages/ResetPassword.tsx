@@ -6,22 +6,31 @@ import { Label } from '../components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { toast } from 'sonner';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+const API_BASE = '/api';
 
 export function ResetPassword() {
   const navigate = useNavigate();
   const [token, setToken] = useState<string | null>(null);
+  const [tokenType, setTokenType] = useState<'access_token' | 'token_hash'>('access_token');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Supabase puts the recovery access_token in the URL hash:
-  // /reset-password#access_token=TOKEN&type=recovery
+  // Supabase may put the token in the URL hash (implicit flow) or query string (PKCE flow):
+  // Hash:  /reset-password#access_token=TOKEN&type=recovery
+  // Query: /reset-password?token_hash=TOKEN&type=recovery
   useEffect(() => {
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const t = params.get('access_token');
-    if (t) setToken(t);
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const queryParams = new URLSearchParams(window.location.search);
+    const accessToken = hashParams.get('access_token') ?? queryParams.get('access_token');
+    const tokenHash = queryParams.get('token_hash');
+    if (accessToken) {
+      setToken(accessToken);
+      setTokenType('access_token');
+    } else if (tokenHash) {
+      setToken(tokenHash);
+      setTokenType('token_hash');
+    }
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,7 +53,7 @@ export function ResetPassword() {
       const res = await fetch(`${API_BASE}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, newPassword }),
+        body: JSON.stringify({ token, tokenType, newPassword }),
       });
       const data = await res.json();
       if (!res.ok) {

@@ -1,4 +1,4 @@
-import { Calendar, Menu, LogOut } from 'lucide-react';
+import { Calendar, Menu, LogOut, KeyRound } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';
@@ -92,13 +92,23 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
               </div>
             )}
             {currentUser ? (
-              <Button 
-                onClick={handleSignOut}
-                variant="outline"
-              >
-                <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="Change Password"
+                  onClick={() => navigate('/change-password')}
+                >
+                  <KeyRound className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={handleSignOut}
+                  variant="outline"
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign Out
+                </Button>
+              </div>
             ) : (
               <Button 
                 onClick={() => setIsLoginOpen(true)}

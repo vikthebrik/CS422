@@ -66,7 +66,7 @@ export function useEvents(
       return;
     }
 
-    const baseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:4000';
+    const baseUrl = '/api';
     const clubColorMap: Record<string, string> = {};
     clubs.forEach(c => { clubColorMap[c.id] = c.color; });
 
