@@ -18,6 +18,7 @@ interface ApiClub {
   org_type: 'union' | 'department' | null;
   logo_url: string | null;
   ics_source_url: string | null;
+  admin_email: string | null;
   social_links: {
     instagram?: string;
     linktree?: string;
@@ -26,6 +27,7 @@ interface ApiClub {
   metadata_tags: {
     description?: string;
     color?: string;
+    section_labels?: { exec?: string; board?: string; intern?: string };
   } | null;
 }
 
@@ -38,9 +40,11 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
     logo: apiClub.logo_url ?? undefined,
     outlookLink: apiClub.ics_source_url ?? undefined,
     description: apiClub.metadata_tags?.description ?? undefined,
+    sectionLabels: apiClub.metadata_tags?.section_labels ?? undefined,
     instagram: (apiClub.social_links as any)?.instagram ?? undefined,
     linktree: (apiClub.social_links as any)?.linktree ?? undefined,
     engage: (apiClub.social_links as any)?.engage ?? undefined,
+    adminEmail: apiClub.admin_email ?? undefined,
   };
 }
 

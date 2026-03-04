@@ -1,4 +1,4 @@
-import { Users, ExternalLink, Plus } from 'lucide-react';
+import { Users, ExternalLink, Plus, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
@@ -9,13 +9,110 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
+import { Checkbox } from '../components/ui/checkbox';
 import { useState } from 'react';
 import { toast } from 'sonner';
+
+const API_BASE = '/api';
+
+type Section = 'exec' | 'board' | 'intern';
+const SECTION_LABELS: Record<Section, string> = { exec: 'Executive Team', board: 'Board', intern: 'Interns' };
+const ALL_SECTIONS: Section[] = ['exec', 'board', 'intern'];
 
 export function ClubRoster() {
   const { clubs, currentUser, addClub } = useApp();
   const navigate = useNavigate();
   const [isAddClubOpen, setIsAddClubOpen] = useState(false);
+
+  // Download CSV state
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
+  const [selectedClubIds, setSelectedClubIds] = useState<Set<string>>(new Set());
+  const [includeClubInfo, setIncludeClubInfo] = useState(true);
+  const [includeSections, setIncludeSections] = useState<Set<Section>>(new Set(ALL_SECTIONS));
+  const [downloading, setDownloading] = useState(false);
+
+  const openDownload = () => {
+    setSelectedClubIds(new Set(clubs.map(c => c.id)));
+    setIncludeClubInfo(true);
+    setIncludeSections(new Set(ALL_SECTIONS));
+    setIsDownloadOpen(true);
+  };
+
+  const toggleClub = (id: string) =>
+    setSelectedClubIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const toggleSection = (sec: Section) =>
+    setIncludeSections(prev => { const s = new Set(prev); s.has(sec) ? s.delete(sec) : s.add(sec); return s; });
+
+  const handleDownload = async () => {
+    if (selectedClubIds.size === 0) { toast.error('Select at least one club'); return; }
+    if (!includeClubInfo && includeSections.size === 0) { toast.error('Select at least one type of data to include'); return; }
+
+    setDownloading(true);
+    // Wrap a value in quotes, escaping internal quotes
+    const esc = (v: string | null | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`;
+
+    const selectedClubs = clubs.filter(c => selectedClubIds.has(c.id));
+
+    // Fetch members for all selected clubs in parallel (only if at least one section is selected)
+    type RawMember = { section: Section; name: string; title: string; email: string | null };
+    const membersByClub = new Map<string, RawMember[]>();
+    if (includeSections.size > 0) {
+      await Promise.all(
+        selectedClubs.map(async c => {
+          try {
+            const res = await fetch(`${API_BASE}/clubs/${c.id}/members`);
+            if (res.ok) membersByClub.set(c.id, await res.json());
+          } catch { /* skip */ }
+        })
+      );
+    }
+
+    // Build header row dynamically
+    const headers: string[] = ['Org Name'];
+    if (includeClubInfo) headers.push('Contact Email', 'Type', 'Description', 'Instagram', 'Linktree', 'Engage');
+    for (const sec of ALL_SECTIONS) {
+      if (includeSections.has(sec)) headers.push(SECTION_LABELS[sec]);
+    }
+
+    const rows: string[] = [headers.join(',')];
+
+    // One row per club
+    for (const c of selectedClubs) {
+      const cells: string[] = [esc(c.name)];
+
+      if (includeClubInfo) {
+        cells.push(
+          esc(c.adminEmail),
+          esc(c.orgType === 'department' ? 'Department' : 'Union'),
+          esc(c.description),
+          esc(c.instagram),
+          esc(c.linktree),
+          esc(c.engage),
+        );
+      }
+
+      for (const sec of ALL_SECTIONS) {
+        if (!includeSections.has(sec)) continue;
+        const members = (membersByClub.get(c.id) ?? []).filter(m => m.section === sec);
+        // Each member on its own line within the cell: "Name — Title — email"
+        const cell = members.map(m => [m.name, m.title, m.email].filter(Boolean).join(' — ')).join('\n');
+        cells.push(esc(cell));
+      }
+
+      rows.push(cells.join(','));
+    }
+
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'mcc_clubs_info.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    setDownloading(false);
+    setIsDownloadOpen(false);
+  };
 
   const canAddClub = currentUser?.role === 'admin';
 
@@ -52,12 +149,18 @@ export function ClubRoster() {
             Explore all student organizations in the Multicultural Center
           </p>
         </div>
-        {canAddClub && (
-          <Button onClick={() => setIsAddClubOpen(true)} className="bg-primary">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Club
+        <div className="flex items-center gap-2">
+          <Button onClick={openDownload} variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Download CSV
           </Button>
-        )}
+          {canAddClub && (
+            <Button onClick={() => setIsAddClubOpen(true)} className="bg-primary">
+              <Plus className="h-4 w-4 mr-2" />
+              Add Club
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -106,6 +209,72 @@ export function ClubRoster() {
           </Card>
         ))}
       </div>
+
+      {/* Download CSV Modal */}
+      <Dialog open={isDownloadOpen} onOpenChange={setIsDownloadOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Download Club Info CSV</DialogTitle>
+            <DialogDescription>
+              Select which clubs and data to include in the export.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 py-2">
+            {/* Club selection */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-medium">Clubs</Label>
+                <div className="flex gap-3 text-xs">
+                  <button type="button" className="text-primary underline underline-offset-2" onClick={() => setSelectedClubIds(new Set(clubs.map(c => c.id)))}>Select all</button>
+                  <button type="button" className="text-muted-foreground underline underline-offset-2" onClick={() => setSelectedClubIds(new Set())}>Deselect all</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-52 overflow-y-auto pr-1">
+                {clubs.map(c => (
+                  <label key={c.id} className="flex items-center gap-2 cursor-pointer select-none text-sm py-0.5">
+                    <Checkbox
+                      checked={selectedClubIds.has(c.id)}
+                      onCheckedChange={() => toggleClub(c.id)}
+                    />
+                    <span className="truncate">{c.name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Data to include */}
+            <div>
+              <Label className="text-sm font-medium block mb-2">Data to include</Label>
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                  <Checkbox checked={includeClubInfo} onCheckedChange={v => setIncludeClubInfo(!!v)} />
+                  Club info (name, type, description, links)
+                </label>
+                <div>
+                  <p className="text-sm mb-1.5">Team members by section:</p>
+                  <div className="pl-4 space-y-1.5">
+                    {ALL_SECTIONS.map(sec => (
+                      <label key={sec} className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                        <Checkbox checked={includeSections.has(sec)} onCheckedChange={() => toggleSection(sec)} />
+                        {SECTION_LABELS[sec]}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button type="button" variant="outline" onClick={() => setIsDownloadOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleDownload} disabled={downloading} className="bg-primary">
+              <Download className="h-4 w-4 mr-2" />
+              {downloading ? 'Downloading…' : 'Download CSV'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Club Modal */}
       <Dialog open={isAddClubOpen} onOpenChange={setIsAddClubOpen}>

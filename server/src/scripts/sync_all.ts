@@ -1,34 +1,30 @@
-import fs from 'fs';
-import path from 'path';
 import dotenv from 'dotenv';
+import path from 'path';
+import { supabase } from '../db/supabase';
 import { populate } from './populate_supabase';
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
-const CLUBS_FILE = path.resolve(__dirname, '../../clubs.json');
-
-interface ClubDef {
-    name: string;
-    url: string;
-}
-
 async function syncAll() {
     console.log('Starting batch sync...');
 
-    if (!fs.existsSync(CLUBS_FILE)) {
-        console.error(`clubs.json not found at ${CLUBS_FILE}`);
+    const { data: clubs, error } = await supabase
+        .from('clubs')
+        .select('id, name, ics_source_url')
+        .not('ics_source_url', 'is', null);
+
+    if (error) {
+        console.error('Failed to fetch clubs from DB:', error.message);
         process.exit(1);
     }
 
-    const clubs: ClubDef[] = JSON.parse(fs.readFileSync(CLUBS_FILE, 'utf-8'));
-
-    console.log(`Found ${clubs.length} clubs to sync.`);
+    console.log(`Found ${clubs.length} clubs with ICS URLs.`);
 
     for (const club of clubs) {
         try {
-            await populate(club.name, club.url);
-        } catch (error) {
-            console.error(`Failed to sync club: ${club.name}`, error);
+            await populate(club.name, club.ics_source_url!);
+        } catch (err: any) {
+            console.error(`Failed to sync club: ${club.name}`, err.message);
             // Continue to next club
         }
     }
@@ -39,7 +35,7 @@ async function syncAll() {
     const PORT = process.env.PORT || 4000;
     const baseUrl = `http://localhost:${PORT}`;
 
-    console.log(`Attempting to clear and warn cache at ${baseUrl}...`);
+    console.log(`Attempting to clear and warm cache at ${baseUrl}...`);
 
     try {
         // 1. Clear Cache using the shared sync secret (no user JWT required)
@@ -53,7 +49,7 @@ async function syncAll() {
             console.warn(`Failed to clear cache: ${clearRes.status} ${clearRes.statusText}`);
         }
 
-        // 2. Warm Cache (Trigger fetches)
+        // 2. Warm Cache
         console.log('Warming cache (fetching events & clubs)...');
         const [eventsRes, clubsRes] = await Promise.all([
             fetch(`${baseUrl}/events`),
@@ -68,7 +64,7 @@ async function syncAll() {
 
     } catch (err) {
         console.warn('Could not contact server to clear/warm cache. Is the server running?');
-        // This is not fatal for the sync itself
+        // Not fatal for the sync itself
     }
 }
 

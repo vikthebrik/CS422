@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Event } from '../types';
+import { Event, CollaboratorInfo } from '../types';
 
 interface ApiEvent {
   id: string;
@@ -13,7 +13,7 @@ interface ApiEvent {
   club_name: string | null;
   club_logo: string | null;
   type: string;
-  collaborators: string[];
+  collaborators: CollaboratorInfo[];
   requires_rsvp: boolean | null;
   rsvp_link: string | null;
   rsvp_note?: string | null;
@@ -36,6 +36,7 @@ function mapApiEvent(
     requiresRsvp: apiEvent.requires_rsvp ?? false,
     rsvpLink: apiEvent.rsvp_link ?? null,
     rsvpNote: apiEvent.rsvp_note ?? null,
+    collaborators: apiEvent.collaborators ?? [],
   };
 }
 

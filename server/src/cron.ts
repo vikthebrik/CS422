@@ -1,31 +1,29 @@
 import cron from 'node-cron';
-import fs from 'fs';
-import path from 'path';
+import { supabase } from './db/supabase';
 import { populate } from './scripts/populate_supabase';
 import { clearAllCache } from './cache';
-
-const CLUBS_FILE = path.resolve(__dirname, '../clubs.json');
-
-interface ClubDef {
-  name: string;
-  url: string;
-}
 
 async function runSync() {
   console.log(`[cron] Starting scheduled sync at ${new Date().toISOString()}`);
 
-  if (!fs.existsSync(CLUBS_FILE)) {
-    console.error(`[cron] clubs.json not found at ${CLUBS_FILE}`);
+  const { data: clubs, error } = await supabase
+    .from('clubs')
+    .select('id, name, ics_source_url')
+    .not('ics_source_url', 'is', null);
+
+  if (error) {
+    console.error('[cron] Failed to fetch clubs from DB:', error.message);
     return;
   }
 
-  const clubs: ClubDef[] = JSON.parse(fs.readFileSync(CLUBS_FILE, 'utf-8'));
+  console.log(`[cron] Found ${clubs.length} clubs with ICS URLs.`);
+
   let succeeded = 0;
   let failed = 0;
 
   for (const club of clubs) {
     try {
-      await populate(club.name, club.url);
+      await populate(club.name, club.ics_source_url!);
       succeeded++;
     } catch (err: any) {
       console.error(`[cron] Failed to sync "${club.name}":`, err.message);

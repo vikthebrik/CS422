@@ -120,7 +120,7 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 ## Org Type (Department vs Union)
 `clubs.org_type` column (migration 007): `'union'` (default) | `'department'`. Both map to `club_admin` role — same permission scope (own org only). The root admin is the only superuser. Frontend maps to `Club.orgType` and displays a "Department" / "Union" badge on ClubPage and ClubRoster.
 
-## Current State (last updated 2026-03-02)
+## Current State (last updated 2026-03-04)
 - Backend API is fully functional: caching, ICS generation, auth, mutations, cache-clear endpoint.
 - Frontend is fully wired to the backend — no mock data for clubs or events.
 - Auth flow (login, persist, sign-out, role-gating) is integrated.
@@ -139,7 +139,10 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 - `eventTypeNames` added to AppContext (fetched from `/event-types`); `selectedEventTypes` initialized to all types on load.
 - FilterSidebar uses live `eventTypeNames` from context (not hardcoded `EVENT_TYPES`).
 - Admin edit modal uses controlled `editingEventType` state for the event type Select (fixes FormData not capturing Radix Select value).
-- `collabEvents` / collab management page is not yet integrated with the API.
+- Collaborations are fully integrated: `GET /collab` (requireAuth) returns all collaborations for the user's club; `PATCH /collab/:id { status }` accepts or rejects; `GET /events` only returns accepted collaborations in the `collaborators` array (with `club_id`, `club_name`, `club_logo`). `Collab.tsx` is rewritten to fetch from the real API — no more mock data.
+- Manual collaborator management: `POST /events/:id/collaborators { clubId }` and `DELETE /events/:id/collaborators/:clubId` (requireAuth, scoped by role). EventPage edit modal shows a "Collaborating Clubs" section (add/remove clubs) visible to any user who can edit the event.
+- ICS sync (cron + `populate_supabase.ts`) now looks up clubs by `ics_source_url` instead of upserting by `name`. If no club with that ICS URL exists (e.g., deleted by admin), the sync silently skips it — admin-made renames and deletions are now permanent.
+- Email change: `POST /auth/change-email { newEmail }` — requireAuth — sends HMAC-signed confirmation link (24h) to new email via nodemailer; `POST /auth/confirm-email { token }` — public — validates token, updates Supabase auth email + `user_roles.email`; `PATCH /admin/users/:userId/email { newEmail }` — requireRoot — immediate update. Frontend: `ChangePassword.tsx` has a "Change Email" section for club admins; `ConfirmEmail.tsx` page at `/confirm-email` handles the confirmation link; `ClubManagement.tsx` has a mail icon per club row that opens an email-change dialog (root admin, immediate).
 - `/about` page is implemented with a block-based CMS: TextBlock, MediaBlock, LinkContainerBlock, ClubShowcaseBlock. Root admin can edit/reorder/add/delete blocks inline. Content stored in `site_settings` table (key=`about-page`, value=jsonb Block[]). Requires DB migration `011_site_settings.sql`. Media uploads go to `mcc-public-assets` Supabase Storage bucket via `POST /site-settings/upload`.
 - `/admin` route removed (Event Management page fully deprecated). `Admin.tsx` file remains but is no longer routed.
 - ICS subscription feature (`SubscriptionLinkGenerator.tsx`) shows an "under construction / coming soon" placeholder — all functional code stripped.

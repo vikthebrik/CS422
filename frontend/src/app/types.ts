@@ -1,3 +1,9 @@
+export interface CollaboratorInfo {
+  club_id: string;
+  club_name: string;
+  club_logo?: string | null;
+}
+
 export interface Event {
   id: string;
   title: string;
@@ -11,6 +17,7 @@ export interface Event {
   requiresRsvp?: boolean;
   rsvpLink?: string | null;
   rsvpNote?: string | null;
+  collaborators?: CollaboratorInfo[];
 }
 
 export interface Club {
@@ -25,6 +32,10 @@ export interface Club {
   instagram?: string;
   linktree?: string;
   engage?: string;
+  /** Login/contact email for the club admin account */
+  adminEmail?: string;
+  /** Custom section names for department orgs (exec/board/intern tiers) */
+  sectionLabels?: { exec?: string; board?: string; intern?: string };
 }
 
 export interface User {

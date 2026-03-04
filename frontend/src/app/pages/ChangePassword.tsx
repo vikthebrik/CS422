@@ -10,12 +10,17 @@ import { useApp } from '../context/AppContext';
 const API_BASE = '/api';
 
 export function ChangePassword() {
-  const { authToken } = useApp();
+  const { authToken, currentUser } = useApp();
   const navigate = useNavigate();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Change email state
+  const [newEmail, setNewEmail] = useState('');
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,59 +61,127 @@ export function ChangePassword() {
     }
   };
 
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newEmail.trim()) return;
+    setEmailLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/change-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ newEmail: newEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error ?? 'Failed to send confirmation email');
+        return;
+      }
+      setEmailSent(true);
+      setNewEmail('');
+    } catch {
+      toast.error('Could not reach the server. Please try again.');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  // Root admins manage emails through Club Management
+  const isAdmin = currentUser?.role === 'admin';
+
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>
-            Enter your current password and choose a new one.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <Label htmlFor="currentPassword">Current Password</Label>
-              <Input
-                id="currentPassword"
-                type="password"
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                placeholder="Your current password"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="newPassword">New Password</Label>
-              <Input
-                id="newPassword"
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="At least 8 characters"
-                required
-                autoComplete="new-password"
-              />
-            </div>
-            <div>
-              <Label htmlFor="confirm">Confirm New Password</Label>
-              <Input
-                id="confirm"
-                type="password"
-                value={confirm}
-                onChange={e => setConfirm(e.target.value)}
-                placeholder="Repeat your new password"
-                required
-                autoComplete="new-password"
-              />
-            </div>
-            <Button type="submit" className="w-full bg-primary" disabled={loading}>
-              {loading ? 'Saving…' : 'Update Password'}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+      <div className="w-full max-w-md space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Change Password</CardTitle>
+            <CardDescription>
+              Enter your current password and choose a new one.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <Label htmlFor="currentPassword">Current Password</Label>
+                <Input
+                  id="currentPassword"
+                  type="password"
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  placeholder="Your current password"
+                  required
+                  autoComplete="current-password"
+                />
+              </div>
+              <div>
+                <Label htmlFor="newPassword">New Password</Label>
+                <Input
+                  id="newPassword"
+                  type="password"
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <div>
+                <Label htmlFor="confirm">Confirm New Password</Label>
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  placeholder="Repeat your new password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+              <Button type="submit" className="w-full bg-primary" disabled={loading}>
+                {loading ? 'Saving…' : 'Update Password'}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        {!isAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Change Email</CardTitle>
+              <CardDescription>
+                A confirmation link will be sent to your new email address.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {emailSent ? (
+                <div className="text-sm text-green-600 dark:text-green-400 text-center py-2">
+                  Confirmation email sent! Check your new inbox and click the link to confirm.
+                </div>
+              ) : (
+                <form onSubmit={handleEmailSubmit} className="space-y-4">
+                  <div>
+                    <Label htmlFor="newEmail">New Email Address</Label>
+                    <Input
+                      id="newEmail"
+                      type="email"
+                      value={newEmail}
+                      onChange={e => setNewEmail(e.target.value)}
+                      placeholder="your-new@email.com"
+                      required
+                      autoComplete="email"
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={emailLoading || !newEmail.trim()}>
+                    {emailLoading ? 'Sending…' : 'Send Confirmation Email'}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

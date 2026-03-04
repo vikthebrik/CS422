@@ -11,18 +11,24 @@ export async function populate(clubName: string, icsUrl: string) {
     console.log(`Fetching ICS from: ${icsUrl}`);
 
     try {
-        // 1. Upsert Club
+        // 1. Look up club by ICS URL — never create or rename clubs during sync.
+        //    If the club was deleted or doesn't have this ICS URL set, skip gracefully.
         const { data: club, error: clubError } = await supabase
             .from('clubs')
-            .upsert({ name: clubName, ics_source_url: icsUrl }, { onConflict: 'name' })
-            .select()
-            .single();
+            .select('id, name')
+            .eq('ics_source_url', icsUrl)
+            .maybeSingle();
 
         if (clubError) {
-            throw new Error(`Failed to upsert club: ${clubError.message}`);
+            throw new Error(`Failed to look up club by ICS URL: ${clubError.message}`);
         }
 
-        console.log(`Club ensured: ${club.id} (${club.name})`);
+        if (!club) {
+            console.log(`[populate] No club found with ICS URL "${icsUrl}" — skipping.`);
+            return;
+        }
+
+        console.log(`Club found: ${club.id} (${club.name})`);
 
         // Fetch Event Types for mapping
         const { data: eventTypesData, error: eventTypesError } = await supabase
@@ -45,10 +51,57 @@ export async function populate(clubName: string, icsUrl: string) {
             return eventTypeMap[name.toLowerCase()] || null;
         };
 
-        // 2. Fetch and Parse ICS
+        // 2. Pre-fetch email → club_id map for attendee matching
+        const { data: userRoles } = await supabase
+            .from('user_roles')
+            .select('email, club_id');
+
+        const emailToClubId: Record<string, string> = {};
+        userRoles?.forEach(ur => {
+            if (ur.email && ur.club_id) {
+                emailToClubId[ur.email.toLowerCase()] = ur.club_id;
+            }
+        });
+
+        // Reverse map: club_id → emails (for finding current club's PARTSTAT)
+        const clubIdToEmails: Record<string, string[]> = {};
+        userRoles?.forEach(ur => {
+            if (ur.email && ur.club_id) {
+                clubIdToEmails[ur.club_id] = clubIdToEmails[ur.club_id] ?? [];
+                clubIdToEmails[ur.club_id].push(ur.email.toLowerCase());
+            }
+        });
+
+        const parseAttendees = (evt: any): Array<{ email: string; partstat: string }> => {
+            const raw = evt.attendee;
+            if (!raw) return [];
+            const list = Array.isArray(raw) ? raw : [raw];
+            return list.map((att: any) => {
+                const val = typeof att === 'string' ? att : (att.val ?? '');
+                const email = val.replace(/^mailto:/i, '').toLowerCase().trim();
+                const partstat = ((att.params?.PARTSTAT) ?? 'NEEDS-ACTION').toString().toUpperCase();
+                return { email, partstat };
+            }).filter(a => a.email);
+        };
+
+        const upsertAttendeeCollabs = async (eventId: string, attendees: Array<{ email: string; partstat: string }>) => {
+            for (const att of attendees) {
+                const attClubId = emailToClubId[att.email];
+                if (!attClubId || attClubId === club.id) continue;
+                const status = att.partstat === 'ACCEPTED' ? 'accepted' : 'pending';
+                const { error: ce } = await supabase
+                    .from('collaborations')
+                    .upsert({ event_id: eventId, club_id: attClubId, role: 'secondary', status },
+                        { onConflict: 'event_id,club_id' });
+                if (ce) console.error(`Failed to upsert attendee collab:`, ce);
+                else collabCount++;
+            }
+        };
+
+        // 3. Fetch and Parse ICS
         const events = await nodeIcal.async.fromURL(icsUrl);
 
-        // 3. Process Events
+        // 4. Process Events
         let processedCount = 0;
         let collabCount = 0;
 
@@ -163,6 +216,8 @@ export async function populate(clubName: string, icsUrl: string) {
 
                     const existingEvent = existingEvents && existingEvents.length > 0 ? existingEvents[0] : null;
 
+                    const attendees = parseAttendees(event);
+
                     if (existingEvent) {
                         // Event exists!
                         if (existingEvent.club_id === club.id) {
@@ -188,19 +243,27 @@ export async function populate(clubName: string, icsUrl: string) {
                                 .eq('id', existingEvent.id);
 
                             if (updateError) console.error(`Failed to update event ${uid}:`, updateError);
-                            else processedCount++;
+                            else {
+                                processedCount++;
+                                // Also process attendees so invitees get collaboration records
+                                await upsertAttendeeCollabs(existingEvent.id, attendees);
+                            }
 
                         } else {
                             // It belongs to ANOTHER club. This is a COLLABORATION.
                             // The first club to sync this UID became the Primary.
-                            // We add this current club as a Secondary collaborator.
+                            // Determine status: check if THIS club appears as an accepted attendee.
+                            const myEmails = clubIdToEmails[club.id] ?? [];
+                            const myAttendee = attendees.find(a => myEmails.includes(a.email));
+                            const status = myAttendee?.partstat === 'ACCEPTED' ? 'accepted' : 'pending';
+
                             const { error: collabError } = await supabase
                                 .from('collaborations')
                                 .upsert({
                                     event_id: existingEvent.id,
                                     club_id: club.id,
                                     role: 'secondary',
-                                    status: 'pending' // Admin must approve
+                                    status,
                                 }, { onConflict: 'event_id,club_id' });
 
                             if (collabError) console.error(`Failed to add collaboration for ${uid}:`, collabError);
@@ -209,7 +272,7 @@ export async function populate(clubName: string, icsUrl: string) {
                     } else {
                         // Event does not exist. Create it (Primary).
                         // This club becomes the Primary owner because it was synced first.
-                        const { error: insertError } = await supabase
+                        const { data: newEvent, error: insertError } = await supabase
                             .from('events')
                             .insert({
                                 club_id: club.id,
@@ -223,16 +286,22 @@ export async function populate(clubName: string, icsUrl: string) {
                                 type_id: typeId,
                                 requires_rsvp: rsvpInfo.required,
                                 rsvp_link: rsvpInfo.link
-                            });
+                            })
+                            .select('id')
+                            .single();
 
                         if (insertError) console.error(`Failed to insert event ${uid}:`, insertError);
-                        else processedCount++;
+                        else {
+                            processedCount++;
+                            // Process attendees so invited clubs get collaboration records
+                            await upsertAttendeeCollabs(newEvent.id, attendees);
+                        }
                     }
                 }
             }
         }
 
-        // 4. PRUNING: Remove events that are in DB for this club but NOT in the valid ICS feed
+        // 5. PRUNING: Remove events that are in DB for this club but NOT in the valid ICS feed
         // Only run this if we actually processed some events to avoid wiping DB on network error
         // But if processedCount is 0, it might mean the calendar is truly empty.
         // Let's rely on processedUids array.

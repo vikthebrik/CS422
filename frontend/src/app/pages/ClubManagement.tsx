@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -79,6 +79,11 @@ export function ClubManagement() {
   const [editingTypeName, setEditingTypeName] = useState('');
   const [deleteTypeConfirm, setDeleteTypeConfirm] = useState<EventType | null>(null);
 
+  // Email change
+  const [emailDialogClub, setEmailDialogClub] = useState<Club | null>(null);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+
   const apiCall = useCallback(
     (method: string, path: string, body?: object) =>
       fetch(`${API_BASE}${path}`, {
@@ -98,6 +103,7 @@ export function ClubManagement() {
       .then(setEventTypes)
       .catch(() => {});
   }, []);
+
 
   const handleAddType = async () => {
     if (!newTypeName.trim()) return;
@@ -313,6 +319,24 @@ export function ClubManagement() {
   const unions = clubs.filter(c => c.orgType === 'union');
   const departments = clubs.filter(c => c.orgType === 'department');
 
+  const handleChangeEmail = async () => {
+    if (!emailDialogClub || !emailInput.trim()) return;
+    setSavingEmail(true);
+    try {
+      const res = await apiCall('PATCH', `/admin/clubs/${emailDialogClub.id}/email`, { newEmail: emailInput.trim() });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to update email'); return; }
+      updateClub(emailDialogClub.id, { adminEmail: data.email });
+      toast.success(`Email updated to ${data.email}`);
+      setEmailDialogClub(null);
+      setEmailInput('');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const renderClubRow = (club: Club) => {
     const eventCount = events.filter(e => e.clubId === club.id).length;
     const isDeleting = deletingId === club.id;
@@ -346,6 +370,15 @@ export function ClubManagement() {
           title={`Upload logo for ${club.name}`}
         >
           <ImageIcon className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          onClick={() => { setEmailInput(club.adminEmail ?? ''); setEmailDialogClub(club); }}
+          title={`Change email for ${club.name}`}
+        >
+          <Mail className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -917,6 +950,45 @@ export function ClubManagement() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email change dialog */}
+      <Dialog open={!!emailDialogClub} onOpenChange={open => { if (!open) { setEmailDialogClub(null); setEmailInput(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Change Login Email — {emailDialogClub?.name}</DialogTitle>
+            <DialogDescription>
+              The change is immediate. The club admin will need to use the new email to log in.
+            </DialogDescription>
+          </DialogHeader>
+          {emailDialogClub && (
+            <div className="space-y-4">
+              {emailDialogClub.adminEmail ? (
+                <p className="text-xs text-muted-foreground">Current email: <span className="font-mono">{emailDialogClub.adminEmail}</span></p>
+              ) : (
+                <p className="text-xs text-muted-foreground">No email linked yet — set one below.</p>
+              )}
+              <div>
+                <Label htmlFor="email-input">New Email</Label>
+                <Input
+                  id="email-input"
+                  type="email"
+                  value={emailInput}
+                  onChange={e => setEmailInput(e.target.value)}
+                  placeholder="new@email.com"
+                  className="mt-1"
+                  onKeyDown={e => { if (e.key === 'Enter') handleChangeEmail(); }}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setEmailDialogClub(null); setEmailInput(''); }}>Cancel</Button>
+                <Button onClick={handleChangeEmail} disabled={savingEmail || !emailInput.trim()}>
+                  {savingEmail ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Saving…</> : 'Update Email'}
+                </Button>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

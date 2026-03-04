@@ -178,7 +178,7 @@ export function CalendarGrid({
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-semibold min-w-0 break-words">{getDisplayTitle()}</h2>
           </div>
-          
+
           <div className="flex flex-wrap items-center gap-2">
             {/* View Selector */}
             <div className="flex border border-border rounded-lg overflow-hidden">
@@ -337,6 +337,19 @@ export function CalendarGrid({
                                       <p className="text-base font-bold text-white leading-tight">
                                         {club.name}
                                       </p>
+                                      {event.collaborators && event.collaborators.length > 0 && (
+                                        <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+                                          {event.collaborators.filter(c => c.club_id !== event.clubId).map(c => (
+                                            <div key={c.club_id} className="w-5 h-5 rounded-full shrink-0 overflow-hidden relative group bg-white" title={c.club_name}>
+                                              {c.club_logo ? (
+                                                <ImageWithFallback src={c.club_logo} alt={c.club_name} className="w-full h-full object-cover" />
+                                              ) : (
+                                                <div className="w-full h-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">{c.club_name.substring(0, 2)}</div>
+                                              )}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                   <p className="font-medium text-white">
@@ -410,8 +423,8 @@ export function CalendarGrid({
                   const isToday = isSameDay(day, new Date());
 
                   return (
-                    <div 
-                      key={index} 
+                    <div
+                      key={index}
                       className="border-r border-border last:border-r-0 pr-2 last:pr-0"
                     >
                       {/* Day header */}
@@ -476,6 +489,19 @@ export function CalendarGrid({
                                         <p className="text-base font-bold text-white leading-tight">
                                           {club.name}
                                         </p>
+                                        {event.collaborators && event.collaborators.length > 0 && (
+                                          <div className="flex items-center gap-1 ml-2 pl-2 border-l border-white/20">
+                                            {event.collaborators.filter(c => c.club_id !== event.clubId).map(c => (
+                                              <div key={c.club_id} className="w-5 h-5 rounded-full shrink-0 overflow-hidden relative group bg-white" title={c.club_name}>
+                                                {c.club_logo ? (
+                                                  <ImageWithFallback src={c.club_logo} alt={c.club_name} className="w-full h-full object-cover" />
+                                                ) : (
+                                                  <div className="w-full h-full bg-muted flex items-center justify-center text-[10px] font-bold text-muted-foreground">{c.club_name.substring(0, 2)}</div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                     <p className="font-medium text-white">
@@ -538,7 +564,7 @@ export function CalendarGrid({
                   {format(currentDate, 'd')}
                 </div>
               </div>
-              
+
               {getEventsForDay(currentDate).length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   No events scheduled for this day
@@ -561,7 +587,7 @@ export function CalendarGrid({
                           }}
                         >
                           <div className="flex items-start gap-3 min-w-0">
-                            <div 
+                            <div
                               className="w-2 shrink-0 h-full rounded-full"
                               style={{ backgroundColor: event.color }}
                             />

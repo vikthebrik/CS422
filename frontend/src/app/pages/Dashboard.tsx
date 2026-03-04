@@ -25,7 +25,10 @@ export function Dashboard() {
     let filtered = events;
 
     if (selectedClubs.length > 0) {
-      filtered = filtered.filter(event => selectedClubs.includes(event.clubId));
+      filtered = filtered.filter(event =>
+        selectedClubs.includes(event.clubId) ||
+        (event.collaborators ?? []).some(c => selectedClubs.includes(c.club_id))
+      );
     }
 
     if (advancedMode) {

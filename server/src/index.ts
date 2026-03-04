@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
@@ -50,6 +51,34 @@ function makeAuthClient() {
     process.env.SUPABASE_KEY ?? '',
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+}
+
+// ---------------------------------------------------------------------------
+// Email-change HMAC token helpers (24-hour expiry, signed with SYNC_SECRET)
+// ---------------------------------------------------------------------------
+function signEmailChangeToken(userId: string, newEmail: string): string {
+  const payload = { uid: userId, email: newEmail, exp: Date.now() + 24 * 60 * 60 * 1000 };
+  const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const secret = process.env.SYNC_SECRET ?? 'dev-secret';
+  const sig = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
+  return `${b64}.${sig}`;
+}
+
+function verifyEmailChangeToken(token: string): { uid: string; email: string } | null {
+  const dot = token.lastIndexOf('.');
+  if (dot < 0) return null;
+  const b64 = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const secret = process.env.SYNC_SECRET ?? 'dev-secret';
+  const expected = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
+  if (sig !== expected) return null;
+  try {
+    const p = JSON.parse(Buffer.from(b64, 'base64url').toString());
+    if (!p.uid || !p.email || typeof p.exp !== 'number' || p.exp < Date.now()) return null;
+    return { uid: p.uid, email: p.email };
+  } catch {
+    return null;
+  }
 }
 
 const app = express();
@@ -281,6 +310,56 @@ app.post('/auth/change-password', requireAuth, async (req: AuthenticatedRequest,
   res.json({ status: 'ok' });
 });
 
+// POST /auth/change-email  { newEmail }
+// Authenticated club admin sends a confirmation email to the new address.
+// Does NOT update immediately — user must click the link.
+app.post('/auth/change-email', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { newEmail } = req.body as { newEmail?: string };
+  if (!newEmail?.trim()) return res.status(400).json({ error: 'newEmail is required' });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(newEmail.trim())) {
+    return res.status(400).json({ error: 'Invalid email format' });
+  }
+
+  const userId = req.userId!;
+  const normalizedNew = newEmail.trim().toLowerCase();
+  const token = signEmailChangeToken(userId, normalizedNew);
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  const confirmUrl = `${frontendUrl}/confirm-email?token=${encodeURIComponent(token)}`;
+
+  await sendMail(
+    normalizedNew,
+    'Confirm your new email address — MCC Calendar Hub',
+    `<p>Click the link below to confirm your new email address for MCC Calendar Hub.</p>
+     <p>This link expires in 24 hours.</p>
+     <p><a href="${confirmUrl}">${confirmUrl}</a></p>
+     <p>If you did not request this change, ignore this email.</p>`,
+  );
+
+  res.json({ status: 'confirmation_sent' });
+});
+
+// POST /auth/confirm-email  { token }
+// Public endpoint called by the frontend after the user clicks the confirmation link.
+app.post('/auth/confirm-email', async (req, res) => {
+  const { token } = req.body as { token?: string };
+  if (!token) return res.status(400).json({ error: 'token is required' });
+
+  const payload = verifyEmailChangeToken(token);
+  if (!payload) return res.status(400).json({ error: 'Invalid or expired confirmation link' });
+
+  const { uid, email: newEmail } = payload;
+
+  const { error } = await supabase.auth.admin.updateUserById(uid, { email: newEmail });
+  if (error) return res.status(500).json({ error: error.message });
+
+  await supabase.from('user_roles').update({ email: newEmail }).eq('user_id', uid);
+
+  res.json({ status: 'ok', email: newEmail });
+});
+
+
 // POST /auth/request-account  { clubName, contactEmail, message? }
 // Publicly accessible — lets clubs without an account submit a request.
 app.post('/auth/request-account', async (req, res) => {
@@ -358,7 +437,8 @@ app.get('/events', async (_req, res) => {
         event_types ( name ),
         collaborations (
           club_id,
-          clubs ( name )
+          status,
+          clubs ( name, logo_url )
         )
       `)
       .order('start_time', { ascending: true });
@@ -370,7 +450,10 @@ app.get('/events', async (_req, res) => {
       club_name: event.clubs?.name,
       club_logo: event.clubs?.logo_url,
       type: event.event_types?.name ?? 'Other',
-      collaborators: event.collaborations?.map((c: any) => c.clubs?.name).filter(Boolean) ?? [],
+      collaborators: (event.collaborations ?? [])
+        .filter((c: any) => c.status === 'accepted')
+        .map((c: any) => ({ club_id: c.club_id, club_name: c.clubs?.name, club_logo: c.clubs?.logo_url }))
+        .filter((c: any) => c.club_name),
     }));
 
     setInCache(cacheKey, enhancedData ?? []);
@@ -560,18 +643,84 @@ app.get('/clubs', async (_req, res) => {
     const cached = getFromCache<any[]>(cacheKey);
     if (cached) return res.json(cached);
 
-    const { data, error } = await supabase
-      .from('clubs')
-      .select('*, org_type')
-      .order('name', { ascending: true });
+    const [{ data, error }, { data: rolesData }, { data: { users: authUsers } }] = await Promise.all([
+      supabase.from('clubs').select('*').order('name', { ascending: true }),
+      supabase.from('user_roles').select('club_id, user_id').eq('role', 'club_admin').not('club_id', 'is', null),
+      supabase.auth.admin.listUsers({ perPage: 1000 }),
+    ]);
 
     if (error) throw error;
 
-    setInCache(cacheKey, data ?? []);
-    res.json(data);
+    // Build userId → auth email from the live auth accounts
+    const authEmailById: Record<string, string> = {};
+    for (const u of authUsers ?? []) {
+      if (u.email) authEmailById[u.id] = u.email;
+    }
+
+    // Map club → auth email (null if no linked account or account has no email)
+    const emailByClub: Record<string, string | null> = {};
+    for (const row of rolesData ?? []) {
+      if (row.club_id) emailByClub[row.club_id] = authEmailById[row.user_id] ?? null;
+    }
+
+    const result = (data ?? []).map((club: any) => ({ ...club, admin_email: emailByClub[club.id] ?? null }));
+
+    setInCache(cacheKey, result);
+    res.json(result);
   } catch (err: any) {
     console.error('Error fetching clubs:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /admin/clubs/:id/email  { newEmail }  — root admin only, immediate email change.
+app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedRequest, res) => {
+  const id = req.params.id as string;
+  const { newEmail } = req.body as { newEmail?: string };
+  if (!newEmail?.trim()) return res.status(400).json({ error: 'newEmail is required' });
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(newEmail.trim())) return res.status(400).json({ error: 'Invalid email format' });
+
+  const normalized = newEmail.trim().toLowerCase();
+
+  try {
+    const { data: roleRow, error: roleError } = await supabase
+      .from('user_roles')
+      .select('user_id')
+      .eq('club_id', id)
+      .eq('role', 'club_admin')
+      .maybeSingle();
+
+    if (roleError) return res.status(500).json({ error: roleError.message });
+
+    if (roleRow) {
+      // Account already linked — update the email on the existing auth user
+      const { error } = await supabase.auth.admin.updateUserById(roleRow.user_id, { email: normalized });
+      if (error) return res.status(500).json({ error: error.message });
+      await supabase.from('user_roles').update({ email: normalized }).eq('user_id', roleRow.user_id);
+    } else {
+      // No user_roles row — check if an auth user with this email already exists
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const existing = (listData?.users ?? []).find(u => u.email?.toLowerCase() === normalized);
+
+      if (existing) {
+        // Re-link the orphaned auth user to this club (e.g. club was deleted+recreated)
+        const { error: upsertErr } = await supabase.from('user_roles').upsert(
+          { user_id: existing.id, email: normalized, role: 'club_admin', club_id: id },
+          { onConflict: 'user_id' }
+        );
+        if (upsertErr) return res.status(500).json({ error: upsertErr.message });
+      } else {
+        return res.status(404).json({ error: 'No account found with that email. Create an account first via Join Requests.' });
+      }
+    }
+
+    clearCacheKey('clubs:all');
+    res.json({ status: 'ok', email: normalized });
+  } catch (err: any) {
+    console.error('[PATCH /admin/clubs/:id/email]', err);
+    res.status(500).json({ error: err.message ?? 'Internal server error' });
   }
 });
 
@@ -580,12 +729,14 @@ app.get('/clubs', async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { description, instagram, linktree, engage, outlookLink } = req.body as {
+  const { name, description, instagram, linktree, engage, outlookLink, sectionLabels } = req.body as {
+    name?: string;
     description?: string;
     instagram?: string;
     linktree?: string;
     engage?: string;
     outlookLink?: string;
+    sectionLabels?: { exec?: string; board?: string; intern?: string };
   };
 
   try {
@@ -604,8 +755,17 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     const currentSocial = (current?.social_links as Record<string, any>) ?? {};
 
     const updates: Record<string, any> = {};
-    if (description !== undefined) {
-      updates.metadata_tags = { ...currentMeta, description };
+    if (name !== undefined) {
+      if (req.userRole !== 'root') return res.status(403).json({ error: 'Only root admin can rename an organization' });
+      if (!name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
+      updates.name = name.trim();
+    }
+    if (description !== undefined || sectionLabels !== undefined) {
+      updates.metadata_tags = {
+        ...currentMeta,
+        ...(description !== undefined ? { description } : {}),
+        ...(sectionLabels !== undefined ? { section_labels: sectionLabels } : {}),
+      };
     }
     if (instagram !== undefined || linktree !== undefined || engage !== undefined) {
       updates.social_links = {
@@ -619,16 +779,14 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       updates.ics_source_url = outlookLink || null;
     }
 
-    const { data, error } = await supabase
-      .from('clubs')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (error) throw error;
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabase.from('clubs').update(updates).eq('id', id);
+      if (error) throw error;
+    }
 
     clearCacheKey('clubs:all');
+    const { data, error: fetchError } = await supabase.from('clubs').select().eq('id', id).single();
+    if (fetchError) throw fetchError;
     res.json(data);
   } catch (err: any) {
     console.error('Error updating club:', err);
@@ -1341,9 +1499,6 @@ app.delete('/clubs/:id/members/:memberId', requireAuth, async (req: Authenticate
 // POST /clubs/:id/members/:memberId/photo  { photo: "data:<mime>;base64,<data>" }
 app.post('/clubs/:id/members/:memberId/photo', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id, memberId } = req.params;
-  if (req.userRole === 'club_admin' && req.userClubId !== id) {
-    return res.status(403).json({ error: 'You can only manage your own club members' });
-  }
   const { photo } = req.body as { photo?: string };
   if (!photo) return res.status(400).json({ error: 'photo is required' });
 
@@ -1371,6 +1526,132 @@ app.post('/clubs/:id/members/:memberId/photo', requireAuth, async (req: Authenti
     .single();
   if (updateError) return res.status(500).json({ error: updateError.message });
   res.json({ photo_url: publicUrl, member: data });
+});
+
+// ---------------------------------------------------------------------------
+// POST /events/:id/collaborators — manually add a club as a collaborator
+// ---------------------------------------------------------------------------
+app.post('/events/:id/collaborators', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { clubId } = req.body as { clubId: string };
+  if (!clubId) return res.status(400).json({ error: 'clubId is required' });
+
+  try {
+    const { data: evt } = await supabase.from('events').select('club_id').eq('id', id).single();
+    if (!evt) return res.status(404).json({ error: 'Event not found' });
+
+    if (req.userRole === 'club_admin' && evt.club_id !== req.userClubId) {
+      return res.status(403).json({ error: 'Can only add collaborators to your own events' });
+    }
+    if (evt.club_id === clubId) {
+      return res.status(400).json({ error: 'Cannot add the host club as a collaborator' });
+    }
+
+    const { data, error } = await supabase
+      .from('collaborations')
+      .upsert({ event_id: id, club_id: clubId, role: 'secondary', status: 'accepted' },
+        { onConflict: 'event_id,club_id' })
+      .select('id, club_id')
+      .single();
+
+    if (error) throw error;
+    clearCacheKey('events:all');
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /events/:id/collaborators/:clubId — remove a collaborator
+// ---------------------------------------------------------------------------
+app.delete('/events/:id/collaborators/:clubId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, clubId } = req.params;
+
+  try {
+    const { data: evt } = await supabase.from('events').select('club_id').eq('id', id).single();
+    if (!evt) return res.status(404).json({ error: 'Event not found' });
+
+    if (req.userRole === 'club_admin' && evt.club_id !== req.userClubId) {
+      return res.status(403).json({ error: 'Can only remove collaborators from your own events' });
+    }
+
+    const { error } = await supabase
+      .from('collaborations')
+      .delete()
+      .eq('event_id', id)
+      .eq('club_id', clubId);
+
+    if (error) throw error;
+    clearCacheKey('events:all');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /collab — list collaborations for the current user's club (all statuses)
+// ---------------------------------------------------------------------------
+app.get('/collab', requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    let query = supabase
+      .from('collaborations')
+      .select(`
+        id, event_id, club_id, role, status,
+        events ( id, title, start_time, end_time,
+          clubs ( name, logo_url )
+        )
+      `);
+
+    if (req.userRole === 'club_admin') {
+      query = query.eq('club_id', req.userClubId);
+    }
+
+    const { data, error } = await query.order('status', { ascending: false });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /collab/:id — accept or reject a collaboration
+// ---------------------------------------------------------------------------
+app.patch('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  const { status } = req.body as { status: string };
+
+  if (!['accepted', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'status must be "accepted" or "rejected"' });
+  }
+
+  try {
+    if (req.userRole === 'club_admin') {
+      const { data: collab } = await supabase
+        .from('collaborations')
+        .select('club_id')
+        .eq('id', id)
+        .single();
+
+      if (!collab || collab.club_id !== req.userClubId) {
+        return res.status(403).json({ error: 'Not authorized to update this collaboration' });
+      }
+    }
+
+    const { error } = await supabase
+      .from('collaborations')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    clearCacheKey('events:all');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------------------

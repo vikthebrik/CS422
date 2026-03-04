@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
-import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -23,7 +23,7 @@ const API_BASE = '/api';
 
 export function ClubPage() {
   const { clubId } = useParams();
-  const { clubs, events, currentUser, authToken, updateClub, addEvent, eventTypeNames } = useApp();
+  const { clubs, events, currentUser, authToken, updateClub, addEvent, eventTypeNames, loading } = useApp();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
@@ -41,6 +41,41 @@ export function ClubPage() {
   const [defaultEnd, setDefaultEnd] = useState('');
 
   const club = clubs.find(c => c.id === clubId);
+  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === clubId);
+
+  // Email copy + edit state
+  const [emailCopied, setEmailCopied] = useState(false);
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [savingEmail, setSavingEmail] = useState(false);
+
+  const copyEmail = () => {
+    if (!club?.adminEmail) return;
+    navigator.clipboard.writeText(club.adminEmail);
+    setEmailCopied(true);
+    setTimeout(() => setEmailCopied(false), 2000);
+  };
+
+  const saveEmail = async () => {
+    if (!club || !emailInput.trim()) return;
+    setSavingEmail(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/clubs/${club.id}/email`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ newEmail: emailInput.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to update email'); return; }
+      updateClub(club.id, { adminEmail: data.email });
+      setEditingEmail(false);
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
   const allUpcoming = clubId ? getUpcomingClubEvents(events, clubId) : [];
   const allPast = clubId ? getPastClubEvents(events, clubId) : [];
 
@@ -60,8 +95,6 @@ export function ClubPage() {
 
   const upcomingEvents = useMemo(() => filterEvents(allUpcoming), [allUpcoming, selectedType, localSearch]);
   const pastEvents = useMemo(() => filterEvents(allPast), [allPast, selectedType, localSearch]);
-
-  const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === clubId);
 
   const openCreateEvent = () => {
     const now = new Date();
@@ -135,6 +168,9 @@ export function ClubPage() {
   };
 
   if (!club) {
+    if (loading) {
+      return <div className="text-center py-12 text-muted-foreground">Loading…</div>;
+    }
     return (
       <div className="text-center py-12">
         <h2 className="text-2xl mb-2">Organization not found</h2>
@@ -147,13 +183,16 @@ export function ClubPage() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    const clubData = {
+    const clubData: Record<string, string> = {
       description: formData.get('club-description') as string,
       instagram: formData.get('club-instagram') as string,
       linktree: formData.get('club-linktree') as string,
       engage: formData.get('club-engage') as string,
       outlookLink: formData.get('club-ics-url') as string,
     };
+    if (currentUser?.role === 'admin') {
+      clubData.name = formData.get('club-name') as string;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/clubs/${club.id}`, {
@@ -276,7 +315,63 @@ export function ClubPage() {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Contact email — visible to all, editable by root */}
+          {(club.adminEmail || currentUser?.role === 'admin') && (
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+              {editingEmail ? (
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    className="flex-1 border border-border rounded px-2 py-1 text-sm font-mono"
+                    value={emailInput}
+                    onChange={e => setEmailInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveEmail();
+                      if (e.key === 'Escape') setEditingEmail(false);
+                    }}
+                    autoFocus
+                    type="email"
+                  />
+                  <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
+                    {savingEmail ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingEmail(false)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {club.adminEmail ? (
+                    <button
+                      type="button"
+                      onClick={copyEmail}
+                      className="inline-flex items-center gap-1.5 text-sm font-mono hover:text-primary transition-colors"
+                      title="Click to copy"
+                    >
+                      {club.adminEmail}
+                      {emailCopied
+                        ? <Check className="h-3.5 w-3.5 text-green-500" />
+                        : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </button>
+                  ) : (
+                    <span className="text-sm text-muted-foreground italic">No email set</span>
+                  )}
+                  {currentUser?.role === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => { setEmailInput(club.adminEmail ?? ''); setEditingEmail(true); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                      title="Edit email"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-3">
             {club.instagram && (
               <a
@@ -411,7 +506,14 @@ export function ClubPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <OurTeam clubId={club.id} canEdit={!!canEdit} authToken={authToken} />
+          <OurTeam
+            clubId={club.id}
+            canEdit={!!canEdit}
+            authToken={authToken}
+            orgType={club.orgType}
+            sectionLabels={club.sectionLabels}
+            onSectionLabelsChange={labels => updateClub(club.id, { sectionLabels: labels })}
+          />
         </CardContent>
       </Card>
 
@@ -423,6 +525,12 @@ export function ClubPage() {
             <DialogDescription>Update organization details, social media links, and calendar feed</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSaveClubInfo} className="space-y-4">
+            {currentUser?.role === 'admin' && (
+              <div>
+                <Label htmlFor="club-name">Organization Name</Label>
+                <Input id="club-name" name="club-name" defaultValue={club.name} required />
+              </div>
+            )}
             <div>
               <Label>Organization Logo</Label>
               <div className="mt-1">

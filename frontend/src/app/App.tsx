@@ -14,6 +14,7 @@ import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { RequestAccount } from './pages/RequestAccount';
 import { ChangePassword } from './pages/ChangePassword';
+import { ConfirmEmail } from './pages/ConfirmEmail';
 
 const router = createBrowserRouter([
   {
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { path: "forgot-password", Component: ForgotPassword },
       { path: "reset-password", Component: ResetPassword },
       { path: "request-account", Component: RequestAccount },
+      { path: "confirm-email", Component: ConfirmEmail },
 
       // Any authenticated user
       {

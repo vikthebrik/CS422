@@ -3,13 +3,12 @@ import { Plus, Pencil, Trash2, Mail, Check, Upload, ImageIcon, X } from 'lucide-
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { toast } from 'sonner';
 
 const API_BASE = '/api';
-const MAX_PHOTO_MB = 3;
+const MAX_PHOTO_BYTES = 3 * 1024 * 1024;
 
 export interface ClubMember {
   id: string;
@@ -30,8 +29,9 @@ const SECTION_LABELS: Record<ClubMember['section'], string> = {
 
 const SECTIONS: ClubMember['section'][] = ['exec', 'board', 'intern'];
 
-// Downscale image client-side (reuses same pattern as LogoUpload)
-function downscaleImage(file: File, maxPx = 300): Promise<string> {
+// Compress image to fit within maxBytes. Scales down to maxPx, then reduces
+// WebP quality in steps until the base64-encoded size fits.
+function compressToFit(file: File, maxBytes = MAX_PHOTO_BYTES, maxPx = 200): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -50,7 +50,18 @@ function downscaleImage(file: File, maxPx = 300): Promise<string> {
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/webp', 0.75));
+
+        // Try decreasing quality until encoded size fits
+        let quality = 0.85;
+        let dataUrl = canvas.toDataURL('image/webp', quality);
+        while (quality > 0.1) {
+          // base64 chars → ~75% of actual bytes
+          const approxBytes = Math.ceil((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+          if (approxBytes <= maxBytes) break;
+          quality = Math.round((quality - 0.1) * 10) / 10;
+          dataUrl = canvas.toDataURL('image/webp', quality);
+        }
+        resolve(dataUrl);
       };
       img.onerror = reject;
       img.src = e.target?.result as string;
@@ -73,9 +84,12 @@ interface Props {
   clubId: string;
   canEdit: boolean;
   authToken: string | null;
+  orgType?: 'union' | 'department';
+  sectionLabels?: { exec?: string; board?: string; intern?: string };
+  onSectionLabelsChange?: (labels: { exec?: string; board?: string; intern?: string }) => void;
 }
 
-export function OurTeam({ clubId, canEdit, authToken }: Props) {
+export function OurTeam({ clubId, canEdit, authToken, orgType, sectionLabels, onSectionLabelsChange }: Props) {
   const [members, setMembers] = useState<ClubMember[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -88,11 +102,19 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
 
   // photo upload state (within dialog)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // inline avatar upload — per-member status: 'compressing' | 'uploading' | undefined
+  const [photoStatus, setPhotoStatus] = useState<Record<string, 'compressing' | 'uploading'>>({});
+  const inlinePhotoRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // copy-email feedback
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // inline section label editing (departments only)
+  const [editingLabel, setEditingLabel] = useState<ClubMember['section'] | null>(null);
+  const [labelDraft, setLabelDraft] = useState('');
+  const [savingLabel, setSavingLabel] = useState(false);
 
   // ── fetch ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -136,9 +158,8 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
-    if (file.size > MAX_PHOTO_MB * 1024 * 1024) { toast.error(`Photo must be under ${MAX_PHOTO_MB}MB`); return; }
     try {
-      setPhotoPreview(await downscaleImage(file));
+      setPhotoPreview(await compressToFit(file));
     } catch {
       toast.error('Failed to process image');
     }
@@ -146,11 +167,13 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
 
   // ── upload photo for a saved member ───────────────────────────────────────
   const uploadPhoto = async (memberId: string, dataUrl: string): Promise<string | null> => {
-    setUploadingPhoto(true);
     try {
       const res = await fetch(`${API_BASE}/clubs/${clubId}/members/${memberId}/photo`, {
         method: 'POST',
-        headers: authHeaders,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({ photo: dataUrl }),
       });
       const data = await res.json();
@@ -159,8 +182,35 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
     } catch {
       toast.error('Could not upload photo');
       return null;
+    }
+  };
+
+  const setMemberStatus = (id: string, status: 'compressing' | 'uploading' | null) =>
+    setPhotoStatus(prev => {
+      const next = { ...prev };
+      if (status === null) delete next[id]; else next[id] = status;
+      return next;
+    });
+
+  // ── inline avatar upload (available to logged-in users) ───────────────────
+  const handleInlinePhotoChange = async (member: ClubMember, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { toast.error('Please select an image file'); return; }
+
+    try {
+      // Show compressing state immediately — large files take a moment to read + encode
+      setMemberStatus(member.id, 'compressing');
+      const dataUrl = await compressToFit(file);
+
+      setMemberStatus(member.id, 'uploading');
+      const url = await uploadPhoto(member.id, dataUrl);
+      if (url) setMembers(prev => prev.map(m => m.id === member.id ? { ...m, photo_url: url } : m));
+    } catch {
+      toast.error('Failed to process image');
     } finally {
-      setUploadingPhoto(false);
+      setMemberStatus(member.id, null);
+      if (inlinePhotoRefs.current[member.id]) inlinePhotoRefs.current[member.id]!.value = '';
     }
   };
 
@@ -193,6 +243,7 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
         if (photoPreview) {
           const url = await uploadPhoto(editingMember.id, photoPreview);
           if (url) updated = { ...updated, photo_url: url };
+          else updated = { ...updated, photo_url: editingMember.photo_url };
         }
         setMembers(prev => prev.map(m => m.id === editingMember.id ? updated : m));
         toast.success('Member updated');
@@ -247,18 +298,86 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
     });
   };
 
+  // ── section label save ────────────────────────────────────────────────────
+  const saveSectionLabel = async (section: ClubMember['section']) => {
+    if (savingLabel) return;
+    const trimmed = labelDraft.trim();
+    if (!trimmed) { setEditingLabel(null); return; }
+    setSavingLabel(true);
+    setEditingLabel(null); // close input immediately to prevent blur double-fire
+    const newLabels = { ...sectionLabels, [section]: trimmed };
+    try {
+      const res = await fetch(`${API_BASE}/clubs/${clubId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+        body: JSON.stringify({ sectionLabels: newLabels }),
+      });
+      if (res.ok) {
+        onSectionLabelsChange?.(newLabels);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        toast.error((body as any).error ?? 'Failed to save section name');
+      }
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingLabel(false);
+    }
+  };
+
   // ── member card ────────────────────────────────────────────────────────────
-  const renderMember = (member: ClubMember) => (
+  const renderMember = (member: ClubMember) => {
+    const status = photoStatus[member.id];
+    const isBusy = !!status;
+    return (
     <div key={member.id} className="flex items-center gap-3 py-3 border-b border-border last:border-0">
-      {/* Avatar */}
-      <div className="w-12 h-12 rounded-full overflow-hidden bg-muted shrink-0 flex items-center justify-center">
-        {member.photo_url ? (
-          <img src={member.photo_url} alt={member.name} className="w-full h-full object-cover" />
-        ) : (
-          <span className="text-sm font-medium text-muted-foreground">
-            {member.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
-          </span>
+      {/* Avatar — click to upload (logged-in users) */}
+      <div className="shrink-0 flex flex-col items-center gap-1">
+        <button
+          type="button"
+          title={authToken ? 'Click to upload photo' : undefined}
+          className={`w-12 h-12 rounded-full overflow-hidden bg-muted flex items-center justify-center relative group ${authToken ? 'cursor-pointer' : 'cursor-default'}`}
+          onClick={() => authToken && inlinePhotoRefs.current[member.id]?.click()}
+          disabled={isBusy}
+        >
+          {member.photo_url ? (
+            <img src={member.photo_url} alt={member.name} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-sm font-medium text-muted-foreground">
+              {member.name.split(' ').map(w => w[0]).slice(0, 2).join('')}
+            </span>
+          )}
+          {/* hover overlay */}
+          {!isBusy && authToken && (
+            <span className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Upload className="h-4 w-4 text-white" />
+            </span>
+          )}
+          {/* busy overlay */}
+          {isBusy && (
+            <span className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+              <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            </span>
+          )}
+        </button>
+        {/* status label + bar */}
+        {isBusy && (
+          <div className="flex flex-col items-center gap-0.5">
+            <span className="text-[10px] text-muted-foreground leading-none">
+              {status === 'compressing' ? 'Compressing…' : 'Uploading…'}
+            </span>
+            <div className="w-12 h-1 rounded-full bg-primary/20 overflow-hidden">
+              <div className="h-full w-1/2 bg-primary rounded-full animate-pulse" />
+            </div>
+          </div>
         )}
+        <input
+          ref={el => { inlinePhotoRefs.current[member.id] = el; }}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={e => handleInlinePhotoChange(member, e)}
+        />
       </div>
 
       {/* Info */}
@@ -293,6 +412,7 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
       )}
     </div>
   );
+  };
 
   // ── render ─────────────────────────────────────────────────────────────────
   const hasAnyMembers = members.length > 0;
@@ -308,12 +428,41 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
           const sectionMembers = members.filter(m => m.section === section);
           if (sectionMembers.length === 0 && !canEdit) return null;
 
+          const displayLabel = sectionLabels?.[section] || SECTION_LABELS[section];
+          const canEditLabel = canEdit && orgType === 'department';
+
           return (
             <div key={section} className="mb-6 last:mb-0">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  {SECTION_LABELS[section]}
-                </h4>
+                {editingLabel === section ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      className="text-sm font-semibold uppercase tracking-wide bg-transparent border-b border-primary outline-none w-40"
+                      value={labelDraft}
+                      onChange={e => setLabelDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveSectionLabel(section); if (e.key === 'Escape') setEditingLabel(null); }}
+                      onBlur={() => { if (!savingLabel) saveSectionLabel(section); }}
+                      disabled={savingLabel}
+                    />
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 group/label">
+                    <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                      {displayLabel}
+                    </h4>
+                    {canEditLabel && (
+                      <button
+                        type="button"
+                        className="opacity-0 group-hover/label:opacity-100 transition-opacity"
+                        onClick={() => { setLabelDraft(displayLabel); setEditingLabel(section); }}
+                        title="Rename section"
+                      >
+                        <Pencil className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    )}
+                  </div>
+                )}
                 {canEdit && (
                   <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => openAdd(section)}>
                     <Plus className="h-3.5 w-3.5 mr-1" />
@@ -357,7 +506,7 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
                 )}
               </div>
               <div className="space-y-1.5">
-                <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()} disabled={uploadingPhoto}>
+                <Button type="button" variant="outline" size="sm" onClick={() => photoInputRef.current?.click()}>
                   <Upload className="h-3.5 w-3.5 mr-1.5" />
                   {photoPreview || editingMember?.photo_url ? 'Change photo' : 'Upload photo'}
                 </Button>
@@ -367,7 +516,7 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
                     Remove
                   </Button>
                 )}
-                <p className="text-xs text-muted-foreground">Optional · max {MAX_PHOTO_MB}MB</p>
+                <p className="text-xs text-muted-foreground">Optional · large images are auto-compressed</p>
               </div>
               <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
             </div>
@@ -381,7 +530,7 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
                 </SelectTrigger>
                 <SelectContent>
                   {SECTIONS.map(s => (
-                    <SelectItem key={s} value={s}>{SECTION_LABELS[s]}</SelectItem>
+                    <SelectItem key={s} value={s}>{sectionLabels?.[s] || SECTION_LABELS[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -430,9 +579,9 @@ export function OurTeam({ clubId, canEdit, authToken }: Props) {
                 type="button"
                 className="bg-primary"
                 onClick={handleSave}
-                disabled={saving || uploadingPhoto || !form.name.trim() || !form.title.trim()}
+                disabled={saving || !form.name.trim() || !form.title.trim()}
               >
-                {saving || uploadingPhoto ? 'Saving…' : editingMember ? 'Save Changes' : 'Add Member'}
+                {saving ? 'Saving…' : editingMember ? 'Save Changes' : 'Add Member'}
               </Button>
             </div>
           </div>

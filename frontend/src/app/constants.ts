@@ -10,7 +10,7 @@ export const UPCOMING_EVENTS_LIMIT = 5;
 export function getUpcomingClubEvents(events: Event[], clubId: string): Event[] {
   const now = Date.now();
   return events
-    .filter((e) => e.clubId === clubId && e.endTime.getTime() >= now)
+    .filter((e) => (e.clubId === clubId || (e.collaborators ?? []).some(c => c.club_id === clubId)) && e.endTime.getTime() >= now)
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())
     .slice(0, UPCOMING_EVENTS_LIMIT);
 }
@@ -21,7 +21,7 @@ export function getUpcomingClubEvents(events: Event[], clubId: string): Event[] 
 export function getPastClubEvents(events: Event[], clubId: string): Event[] {
   const now = Date.now();
   return events
-    .filter((e) => e.clubId === clubId && e.endTime.getTime() < now)
+    .filter((e) => (e.clubId === clubId || (e.collaborators ?? []).some(c => c.club_id === clubId)) && e.endTime.getTime() < now)
     .sort((a, b) => b.startTime.getTime() - a.startTime.getTime());
 }
 

@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router';
-import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -12,14 +12,17 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { EVENT_TYPES } from '../types';
+import { EVENT_TYPES, CollaboratorInfo } from '../types';
 import { getLocationUrl } from '../constants';
 
 export function EventPage() {
   const { eventId } = useParams();
-  const { events, clubs, currentUser, updateEvent } = useApp();
+  const { events, clubs, currentUser, authToken, updateEvent } = useApp();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [localCollabs, setLocalCollabs] = useState<CollaboratorInfo[]>([]);
+  const [addClubId, setAddClubId] = useState<string>('');
+  const [collabLoading, setCollabLoading] = useState(false);
 
   const event = events.find(e => e.id === eventId);
   const club = event ? clubs.find(c => c.id === event.clubId) : null;
@@ -35,10 +38,63 @@ export function EventPage() {
     );
   }
 
+  const openEditModal = () => {
+    setLocalCollabs(event?.collaborators ?? []);
+    setAddClubId('');
+    setIsEditModalOpen(true);
+  };
+
+  const handleAddCollaborator = async () => {
+    if (!addClubId || !event) return;
+    setCollabLoading(true);
+    try {
+      const res = await fetch(`/api/events/${event.id}/collaborators`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ clubId: addClubId }),
+      });
+      if (!res.ok) {
+        const { error } = await res.json();
+        throw new Error(error);
+      }
+      const addedClub = clubs.find(c => c.id === addClubId)!;
+      const newCollab: CollaboratorInfo = { club_id: addClubId, club_name: addedClub.name, club_logo: addedClub.logo };
+      const updated = [...localCollabs, newCollab];
+      setLocalCollabs(updated);
+      updateEvent(event.id, { collaborators: updated });
+      setAddClubId('');
+      toast.success(`${addedClub.name} added as collaborator`);
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to add collaborator');
+    } finally {
+      setCollabLoading(false);
+    }
+  };
+
+  const handleRemoveCollaborator = async (clubId: string) => {
+    if (!event) return;
+    setCollabLoading(true);
+    try {
+      const res = await fetch(`/api/events/${event.id}/collaborators/${clubId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) throw new Error('Failed to remove collaborator');
+      const updated = localCollabs.filter(c => c.club_id !== clubId);
+      setLocalCollabs(updated);
+      updateEvent(event.id, { collaborators: updated });
+      toast.success('Collaborator removed');
+    } catch (err: any) {
+      toast.error(err.message ?? 'Failed to remove collaborator');
+    } finally {
+      setCollabLoading(false);
+    }
+  };
+
   const handleSaveEvent = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
+
     const eventData = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
@@ -68,7 +124,7 @@ export function EventPage() {
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-3">
                 <Badge variant="secondary">{event.eventType}</Badge>
-                <Badge 
+                <Badge
                   className="text-white"
                   style={{ backgroundColor: club.color }}
                 >
@@ -79,7 +135,7 @@ export function EventPage() {
               <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
             </div>
             {canEdit && (
-              <Button onClick={() => setIsEditModalOpen(true)} className="bg-primary shrink-0">
+              <Button onClick={openEditModal} className="bg-primary shrink-0">
                 <Pencil className="h-4 w-4 mr-2" />
                 Edit Event
               </Button>
@@ -176,7 +232,7 @@ export function EventPage() {
         <CardContent>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div 
+              <div
                 className="w-12 h-12 rounded-lg flex items-center justify-center text-white"
                 style={{ backgroundColor: club.color }}
               >
@@ -193,6 +249,47 @@ export function EventPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Secondary Collaborators */}
+      {event.collaborators && event.collaborators.filter(c => c.club_id !== event.clubId).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Collaborating Organizations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {event.collaborators.filter(c => c.club_id !== event.clubId).map(collab => {
+              const collabClub = clubs.find(c => c.id === collab.club_id);
+              if (!collabClub) return null;
+              return (
+                <div key={collab.club_id} className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div
+                      className="w-12 h-12 rounded-lg flex items-center justify-center text-white overflow-hidden shrink-0"
+                      style={{ backgroundColor: collabClub.color }}
+                    >
+                      {collabClub.logo ? (
+                        <img src={collabClub.logo} alt={collabClub.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-lg">{collabClub.name.substring(0, 2)}</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium text-lg">{collabClub.name}</div>
+                      <div className="text-sm text-muted-foreground">{collabClub.description}</div>
+                    </div>
+                  </div>
+                  <Button variant="outline" onClick={() => navigate(`/club/${collab.club_id}`)}>
+                    View Club
+                  </Button>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Edit Event Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
@@ -231,6 +328,61 @@ export function EventPage() {
                 <Input id="location" name="location" defaultValue={event.location} required />
               </div>
             </div>
+            {/* Collaborators */}
+            <div>
+              <Label>Collaborating Clubs</Label>
+              <p className="text-xs text-muted-foreground mb-2">
+                These clubs will appear as co-hosts on the event
+              </p>
+              <div className="space-y-2 mb-3">
+                {localCollabs.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No collaborators yet</p>
+                )}
+                {localCollabs.map(c => (
+                  <div key={c.club_id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      {c.club_logo
+                        ? <img src={c.club_logo} alt="" className="w-5 h-5 rounded object-cover" />
+                        : <div className="w-5 h-5 rounded bg-muted" />}
+                      <span className="text-sm font-medium">{c.club_name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={collabLoading}
+                      onClick={() => handleRemoveCollaborator(c.club_id)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {/* Add collaborator */}
+              <div className="flex gap-2">
+                <Select value={addClubId} onValueChange={setAddClubId}>
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Select a club to add…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clubs
+                      .filter(c => c.id !== event.clubId && !localCollabs.some(lc => lc.club_id === c.id))
+                      .map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!addClubId || collabLoading}
+                  onClick={handleAddCollaborator}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
                 Cancel
