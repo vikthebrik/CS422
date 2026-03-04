@@ -208,19 +208,53 @@ app.post('/auth/logout', (_req, res) => {
 });
 
 // POST /auth/forgot-password  { email }
-// Sends a Supabase password-reset email. The link in the email redirects to
-// FRONTEND_URL/reset-password with the recovery token in the URL hash.
+// Uses the admin generateLink API (no rate limit; each call invalidates previous tokens)
+// so users can request as many resets as needed — only the latest link works.
 app.post('/auth/forgot-password', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'email is required' });
 
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${frontendUrl}/reset-password`,
-  });
+  const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER;
+
+  try {
+    const { data: linkData, error } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email: email.trim().toLowerCase(),
+      options: { redirectTo: `${frontendUrl}/reset-password` },
+    });
+
+    if (error) {
+      console.error('forgot-password generateLink error:', error.message);
+    } else {
+      const resetUrl = (linkData as any)?.properties?.action_link;
+      if (resetUrl) {
+        await sendMail(
+          email,
+          'Reset your MCC Calendar Hub password',
+          `
+            <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+              <h2 style="color:#1d4ed8">Reset Your Password</h2>
+              <p>We received a request to reset the password for your account.
+                 Click the button below to set a new password. This link expires in 24 hours.</p>
+              <a href="${resetUrl}"
+                 style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
+                Reset Password
+              </a>
+              <p style="color:#6b7280;font-size:13px">
+                If you didn't request this, you can safely ignore this email — your password won't change.
+              </p>
+              ${fromEmail ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" /><p style="color:#9ca3af;font-size:11px">Sent from <strong>${fromEmail}</strong></p>` : ''}
+            </div>
+          `,
+        );
+      }
+    }
+  } catch (err: any) {
+    console.error('forgot-password error:', err.message);
+  }
 
   // Always return 200 to avoid leaking whether an email exists
-  if (error) console.error('forgot-password error:', error.message);
   res.json({ status: 'ok' });
 });
 
@@ -694,15 +728,56 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
 
     if (roleError) return res.status(500).json({ error: roleError.message });
 
+    // Always fetch the full auth user list — needed for both branches
+    const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+    const allUsers = listData?.users ?? [];
+
     if (roleRow) {
-      // Account already linked — update the email on the existing auth user
-      const { error } = await supabase.auth.admin.updateUserById(roleRow.user_id, { email: normalized });
-      if (error) return res.status(500).json({ error: error.message });
+      // Guard: is the target email already owned by a different auth user?
+      const conflict = allUsers.find(u => u.email?.toLowerCase() === normalized && u.id !== roleRow.user_id);
+      if (conflict) {
+        // Check if the conflicting auth user is actively linked to a different club
+        const { data: conflictRole } = await supabase
+          .from('user_roles')
+          .select('club_id')
+          .eq('user_id', conflict.id)
+          .maybeSingle();
+
+        if (conflictRole) {
+          // Active admin of another club — block the operation
+          return res.status(400).json({ error: `${normalized} is already the admin of another active organization.` });
+        }
+
+        // Orphaned auth user (no user_roles row) — switchover:
+        // Re-point user_roles to the correct-email auth account and delete the stale one.
+        const { error: switchErr } = await supabase
+          .from('user_roles')
+          .update({ user_id: conflict.id, email: normalized })
+          .eq('user_id', roleRow.user_id);
+        if (switchErr) return res.status(500).json({ error: switchErr.message });
+
+        await supabase.auth.admin.deleteUser(roleRow.user_id);
+
+        clearCacheKey('clubs:all');
+        return res.json({ status: 'ok', email: normalized });
+      }
+
+      // Account already linked — update email immediately via admin API.
+      // email_confirm: true skips Supabase's own confirmation flow.
+      const { error: updateErr } = await supabase.auth.admin.updateUserById(
+        roleRow.user_id,
+        { email: normalized, email_confirm: true },
+      );
+
+      if (updateErr) {
+        console.error('[PATCH /admin/clubs/:id/email] updateUserById failed:', JSON.stringify(updateErr));
+        return res.status(500).json({ error: updateErr.message });
+      }
+
       await supabase.from('user_roles').update({ email: normalized }).eq('user_id', roleRow.user_id);
     } else {
       // No user_roles row — check if an auth user with this email already exists
-      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const existing = (listData?.users ?? []).find(u => u.email?.toLowerCase() === normalized);
+      const existing = allUsers.find(u => u.email?.toLowerCase() === normalized);
 
       if (existing) {
         // Re-link the orphaned auth user to this club (e.g. club was deleted+recreated)
@@ -1034,11 +1109,12 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
     });
   }
 
-  // Generate a simple memorable password
-  const password =
-    Math.random().toString(36).slice(2, 8) +
-    Math.random().toString(36).slice(2, 5).toUpperCase() +
-    '!1';
+  // Internal-only placeholder password — never sent to the user.
+  // The user will set their own password via the recovery link below.
+  const internalPassword =
+    Math.random().toString(36).slice(2, 10) +
+    Math.random().toString(36).slice(2, 6).toUpperCase() +
+    '!2';
 
   try {
     // 1. Create club
@@ -1054,7 +1130,7 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
     let userId: string;
     const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
       email,
-      password,
+      password: internalPassword,
       email_confirm: true,
     });
 
@@ -1065,8 +1141,7 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
         await supabase.from('clubs').delete().eq('id', (club as any).id);
         throw authErr;
       }
-      // Orphaned auth user (exists in Supabase but has no user_role).
-      // Find them by listing users and reset their password so fresh credentials are issued.
+      // Orphaned auth user (exists in Supabase but has no user_role). Reset their password.
       const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
       const orphan = listData?.users?.find((u: any) => u.email === email);
       if (!orphan) {
@@ -1074,7 +1149,7 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
         throw new Error('Auth user exists but could not be retrieved — please manually remove it in Supabase Auth before approving.');
       }
       userId = orphan.id;
-      await supabase.auth.admin.updateUserById(userId, { password });
+      await supabase.auth.admin.updateUserById(userId, { password: internalPassword });
     } else if (!authData?.user) {
       await supabase.from('clubs').delete().eq('id', (club as any).id);
       throw new Error('Failed to create auth user');
@@ -1082,7 +1157,7 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
       userId = authData.user.id;
     }
 
-    // 3. Insert user_role (without raw_password first, in case column doesn't exist yet)
+    // 3. Insert user_role
     const { error: roleErr } = await supabase.from('user_roles').insert({
       user_id: userId,
       email,
@@ -1096,47 +1171,47 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
       throw roleErr;
     }
 
-    // 4. Try to store the plaintext password for the admin UI (best-effort — column may not exist)
-    await supabase.from('user_roles').update({ raw_password: password }).eq('user_id', userId);
-
-    // 5. Mark request approved
+    // 4. Mark request approved
     await supabase.from('account_requests').update({ status: 'approved' }).eq('id', requestId);
 
     clearCacheKey('clubs:all');
 
-    // 6. Email the new club admin their login credentials (best-effort)
+    // 5. Generate a password-set link and email it (best-effort)
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    const { data: linkData } = await supabase.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+    });
+    const setPasswordUrl = (linkData as any)?.properties?.action_link ?? `${frontendUrl}/forgot-password`;
+
+    const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'no-reply@supabase.io';
+
     await sendMail(
       email,
       `Your MCC Calendar Hub account is ready — ${(club as any).name}`,
       `
         <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
           <h2 style="color:#1d4ed8">Welcome to MCC Calendar Hub!</h2>
-          <p>Your organization <strong>${(club as any).name}</strong> has been approved.
-             You can now log in and manage your club's events.</p>
-          <table style="border-collapse:collapse;width:100%;margin:16px 0">
-            <tr>
-              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600;width:40%">Email</td>
-              <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${email}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px;border:1px solid #e5e7eb;background:#f9fafb;font-weight:600">Temporary Password</td>
-              <td style="padding:8px;border:1px solid #e5e7eb;font-family:monospace">${password}</td>
-            </tr>
-          </table>
-          <p style="color:#6b7280;font-size:13px">
-            For security, please change your password after your first login using the
-            <strong>Change Password</strong> option in the navigation bar.
-          </p>
-          <a href="${frontendUrl}"
-             style="display:inline-block;background:#1d4ed8;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;margin-top:8px">
-            Go to MCC Calendar Hub
+          <p>Your organization <strong>${(club as any).name}</strong> has been approved.</p>
+          <p>Click the button below to set your password and activate your account:</p>
+          <a href="${setPasswordUrl}"
+             style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
+            Set My Password
           </a>
+          <p style="color:#6b7280;font-size:13px;margin-top:16px">
+            This link expires in 24 hours. If it has already expired, use the
+            <strong>Forgot Password</strong> option on the login page at
+            <a href="${frontendUrl}" style="color:#1d4ed8">${frontendUrl}</a>
+            to request a new one.
+          </p>
+          <p style="color:#6b7280;font-size:12px">Your login email is: <strong>${email}</strong></p>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" />
+          <p style="color:#9ca3af;font-size:11px">This email was sent from <strong>${fromEmail}</strong>.</p>
         </div>
       `,
     );
 
-    res.json({ clubId: (club as any).id, clubName: (club as any).name, email, password });
+    res.json({ clubId: (club as any).id, clubName: (club as any).name, email, fromEmail });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? 'Approval failed' });
   }
@@ -1478,6 +1553,51 @@ app.patch('/clubs/:id/members/:memberId', requireAuth, async (req: Authenticated
     .single();
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'Member not found' });
+
+  // If email was updated to a valid new email
+  if (email && email.trim() !== '') {
+    try {
+      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
+      const user = listData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
+
+      if (user) {
+        const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+        const { data: linkData } = await supabase.auth.admin.generateLink({
+          type: 'recovery',
+          email: user.email!,
+        });
+        const setPasswordUrl = (linkData as any)?.properties?.action_link ?? `${frontendUrl}/forgot-password`;
+
+        await sendMail(
+          user.email!,
+          `Reset Your MCC Calendar Hub Password`,
+          `
+            <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+              <h2 style="color:#1d4ed8">MCC Calendar Hub Action Required</h2>
+              <p>Hello,</p>
+              <p>Your email has been associated with an organization member profile on the MCC Calendar Hub.</p>
+              <p>Click the button below to rest/set your password to access your account:</p>
+              <a href="${setPasswordUrl}"
+                 style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
+                Reset My Password
+              </a>
+              <p style="color:#666;font-size:14px;margin-top:24px">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <span style="word-break:break-all;color:#4b5563">${setPasswordUrl}</span>
+              </p>
+              <p style="color:#999;font-size:12px;margin-top:32px">
+                If you did not expect this email, you can safely ignore it.
+              </p>
+            </div>
+          `
+        );
+      }
+    } catch (adminErr) {
+      console.error('Failed to send password reset email:', adminErr);
+      // Suppress error so that member profile still gets updated successfully 
+    }
+  }
+
   res.json(data);
 });
 
@@ -1509,7 +1629,7 @@ app.post('/clubs/:id/members/:memberId/photo', requireAuth, async (req: Authenti
   const buffer = Buffer.from(base64Data, 'base64');
   const filename = `${memberId}.${ext}`;
 
-  await supabase.storage.createBucket('member-photos', { public: true }).catch(() => {});
+  await supabase.storage.createBucket('member-photos', { public: true }).catch(() => { });
   const { error: uploadError } = await supabase.storage
     .from('member-photos')
     .upload(filename, buffer, { contentType, upsert: true });

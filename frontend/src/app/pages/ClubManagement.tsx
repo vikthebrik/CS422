@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, Copy, Check, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -31,7 +31,7 @@ interface AccountRequest {
 interface ApprovalResult {
   clubName: string;
   email: string;
-  password: string;
+  fromEmail?: string;
 }
 
 interface EventType { id: string; name: string; }
@@ -58,7 +58,6 @@ export function ClubManagement() {
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [requestOrgTypes, setRequestOrgTypes] = useState<Record<string, 'union' | 'department'>>({});
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(null);
-  const [copiedField, setCopiedField] = useState<'email' | 'password' | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [rejectConfirm, setRejectConfirm] = useState<AccountRequest | null>(null);
   const [clearAllConfirm, setClearAllConfirm] = useState(false);
@@ -268,7 +267,7 @@ export function ClubManagement() {
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? 'Approval failed'); return; }
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
-      setApprovalResult({ clubName: data.clubName, email: data.email, password: data.password });
+      setApprovalResult({ clubName: data.clubName, email: data.email, fromEmail: data.fromEmail });
       toast.success(`"${data.clubName}" approved and account created`);
     } catch {
       toast.error('Could not reach the server');
@@ -307,11 +306,6 @@ export function ClubManagement() {
     }
   };
 
-  const copyToClipboard = async (text: string, field: 'email' | 'password') => {
-    await navigator.clipboard.writeText(text);
-    setCopiedField(field);
-    setTimeout(() => setCopiedField(null), 2000);
-  };
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const historyRequests = requests.filter(r => r.status !== 'pending');
@@ -801,40 +795,15 @@ export function ClubManagement() {
           {approvalResult && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Share these credentials with the club. They can change their password after logging in.
+                A password-setup email has been sent to <strong>{approvalResult.email}</strong>.
+                The link expires in 24 hours — if unused, they can request a new one via
+                <strong> Forgot Password</strong> on the login page.
               </p>
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Email</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md font-mono">
-                      {approvalResult.email}
-                    </code>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => copyToClipboard(approvalResult.email, 'email')}
-                    >
-                      {copiedField === 'email' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Password</Label>
-                  <div className="flex items-center gap-2 mt-1">
-                    <code className="flex-1 text-sm bg-muted px-3 py-2 rounded-md font-mono">
-                      {approvalResult.password}
-                    </code>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      onClick={() => copyToClipboard(approvalResult.password, 'password')}
-                    >
-                      {copiedField === 'password' ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-              </div>
+              {approvalResult.fromEmail && (
+                <p className="text-xs text-muted-foreground">
+                  Email sent from: <strong>{approvalResult.fromEmail}</strong>
+                </p>
+              )}
               <Button className="w-full" onClick={() => setApprovalResult(null)}>Done</Button>
             </div>
           )}
