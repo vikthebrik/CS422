@@ -2,10 +2,10 @@
  * @file RequestAccount.tsx
  * @description Public form for organizations to request a club admin account. Route: /request-account
  *
- * Calls POST /auth/request-account { clubName, contactEmail, message? }.
- * Inserts a row into the `account_requests` table with status 'pending'.
- * Root admin reviews and approves/rejects requests in ClubManagement.tsx.
- * Linked from LoginDialog.tsx.
+ * Submits POST /auth/request-account { clubName, contactEmail, message? }.
+ * This only creates a pending row — no email is sent immediately.
+ * The MCC root admin reviews requests in ClubManagement and approves them,
+ * at which point login credentials are emailed to the contact address.
  */
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -13,7 +13,6 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { toast } from 'sonner';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
@@ -53,73 +52,91 @@ export function RequestAccount() {
   };
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Request an Account</CardTitle>
-          <CardDescription>
-            Fill in the form below to request an admin account for your club. The MCC root
-            administrator will review and provision your credentials.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {submitted ? (
-            <div className="space-y-4 text-center">
-              <p className="text-sm text-muted-foreground">
-                Your request has been submitted. The MCC administrator will be in touch via{' '}
-                <strong>{contactEmail}</strong>.
-              </p>
-              <Link to="/" className="text-sm text-primary underline underline-offset-4">
-                Back to home
-              </Link>
+    <div className="min-h-[70vh] flex flex-col items-center justify-center px-4 text-center">
+
+      <img
+        src="/assets/Sitting.png"
+        alt="Sitting and waiting"
+        className="h-36 w-36 object-contain mb-2"
+      />
+
+      {submitted ? (
+        <div className="max-w-sm space-y-4">
+          <h2 className="text-xl">Request submitted</h2>
+          <p className="text-sm text-muted-foreground">
+            Your request for <strong>{clubName}</strong> is now pending review
+            by the MCC administrator.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            No email has been sent yet — you'll receive your login credentials
+            at <strong>{contactEmail}</strong> once your request is approved.
+            This typically takes a few business days.
+          </p>
+          <div className="pt-2">
+            <Link to="/" className="text-sm text-muted-foreground underline underline-offset-4">
+              Back to home
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-sm space-y-5">
+          <div>
+            <h2 className="text-xl mb-1">Request an account</h2>
+            <p className="text-sm text-muted-foreground">
+              Fill in the form below. The MCC administrator will review your
+              request and email your login credentials to the address you provide.
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4 text-left">
+            <div>
+              <Label htmlFor="clubName">Club / Organization Name</Label>
+              <Input
+                id="clubName"
+                value={clubName}
+                onChange={e => setClubName(e.target.value)}
+                placeholder="e.g. Black Student Union"
+                required
+              />
             </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="clubName">Club / Organization Name</Label>
-                <Input
-                  id="clubName"
-                  value={clubName}
-                  onChange={e => setClubName(e.target.value)}
-                  placeholder="e.g. Black Student Union"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="contactEmail">Contact Email</Label>
-                <Input
-                  id="contactEmail"
-                  type="email"
-                  value={contactEmail}
-                  onChange={e => setContactEmail(e.target.value)}
-                  placeholder="you@uoregon.edu"
-                  required
-                  autoComplete="email"
-                />
-              </div>
-              <div>
-                <Label htmlFor="message">Message (optional)</Label>
-                <Textarea
-                  id="message"
-                  value={message}
-                  onChange={e => setMessage(e.target.value)}
-                  placeholder="Anything you'd like to share with the administrator…"
-                  rows={3}
-                />
-              </div>
-              <Button type="submit" className="w-full bg-primary" disabled={loading}>
-                {loading ? 'Submitting…' : 'Submit Request'}
-              </Button>
-              <p className="text-center text-sm text-muted-foreground">
-                Already have an account?{' '}
-                <Link to="/" className="text-primary underline underline-offset-4">
-                  Back to home
-                </Link>
+            <div>
+              <Label htmlFor="contactEmail">Contact Email</Label>
+              <Input
+                id="contactEmail"
+                type="email"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                placeholder="you@uoregon.edu"
+                required
+                autoComplete="email"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Your credentials will be sent here once approved.
               </p>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+            </div>
+            <div>
+              <Label htmlFor="message">Message <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Textarea
+                id="message"
+                value={message}
+                onChange={e => setMessage(e.target.value)}
+                placeholder="Anything you'd like the administrator to know…"
+                rows={3}
+              />
+            </div>
+            <Button type="submit" className="w-full bg-primary" disabled={loading}>
+              {loading ? 'Submitting…' : 'Submit Request'}
+            </Button>
+          </form>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <Link to="/" className="text-primary underline underline-offset-4">
+              Back to home
+            </Link>
+          </p>
+        </div>
+      )}
     </div>
   );
 }

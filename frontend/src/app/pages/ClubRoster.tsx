@@ -130,16 +130,21 @@ export function ClubRoster() {
   };
 
   const [search, setSearch] = useState('');
-  const [showDepartments, setShowDepartments] = useState(false);
+  const [showUnions, setShowUnions] = useState(true);
+  const [showDepartments, setShowDepartments] = useState(true);
 
-  // MCC itself should always be visible even when departments are hidden
+  // MCC itself should always be visible even when filtered
   const isMccOrg = (name: string) => {
     const n = name.toLowerCase();
     return n === 'mcc' || n.includes('multicultural center');
   };
 
   const filteredClubs = clubs.filter(club => {
-    if (club.orgType === 'department' && !showDepartments && !isMccOrg(club.name)) return false;
+    if (!isMccOrg(club.name)) {
+      if (club.orgType === 'department' && !showDepartments) return false;
+      if (club.orgType !== 'department' && !showUnions) return false;
+    }
+
     if (search.trim()) {
       const q = search.toLowerCase();
       return club.name.toLowerCase().includes(q) || (club.description ?? '').toLowerCase().includes(q);
@@ -152,7 +157,7 @@ export function ClubRoster() {
   const handleAddClub = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-    
+
     const clubId = formData.get('clubId') as string;
     const clubName = formData.get('clubName') as string;
     const description = formData.get('description') as string;
@@ -164,7 +169,7 @@ export function ClubRoster() {
     const newClub = {
       id: clubId.toLowerCase().replace(/\s+/g, '-'),
       name: clubName,
-      color: color || '#' + Math.floor(Math.random()*16777215).toString(16),
+      color: color || '#' + Math.floor(Math.random() * 16777215).toString(16),
       description,
     };
 
@@ -207,14 +212,24 @@ export function ClubRoster() {
             className="pl-9"
           />
         </div>
-        <Button
-          variant={showDepartments ? 'default' : 'outline'}
-          onClick={() => setShowDepartments(v => !v)}
-          className="shrink-0"
-        >
-          <Building2 className="h-4 w-4 mr-2" />
-          {showDepartments ? 'Departments: On' : 'Departments: Off'}
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <Button
+            variant={showUnions ? 'default' : 'outline'}
+            onClick={() => setShowUnions(v => !v)}
+            className="flex-1 sm:flex-none"
+          >
+            <Users className="h-4 w-4 mr-2" />
+            {showUnions ? 'Clubs: On' : 'Clubs: Off'}
+          </Button>
+          <Button
+            variant={showDepartments ? 'default' : 'outline'}
+            onClick={() => setShowDepartments(v => !v)}
+            className="flex-1 sm:flex-none"
+          >
+            <Building2 className="h-4 w-4 mr-2" />
+            {showDepartments ? 'Departments: On' : 'Departments: Off'}
+          </Button>
+        </div>
       </div>
 
       {filteredClubs.length === 0 && (
@@ -232,7 +247,7 @@ export function ClubRoster() {
           >
             <CardHeader>
               <div className="flex items-start gap-4">
-                <div 
+                <div
                   className="w-16 h-16 rounded-lg flex items-center justify-center text-white shrink-0"
                   style={{ backgroundColor: club.color }}
                 >
@@ -349,39 +364,39 @@ export function ClubRoster() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="clubId">Club ID</Label>
-                <Input 
-                  id="clubId" 
-                  name="clubId" 
-                  placeholder="e.g., nsu" 
-                  required 
+                <Input
+                  id="clubId"
+                  name="clubId"
+                  placeholder="e.g., nsu"
+                  required
                 />
                 <p className="text-xs text-muted-foreground mt-1">Lowercase, no spaces</p>
               </div>
               <div>
                 <Label htmlFor="clubName">Club Name</Label>
-                <Input 
-                  id="clubName" 
-                  name="clubName" 
-                  placeholder="e.g., NSU" 
-                  required 
+                <Input
+                  id="clubName"
+                  name="clubName"
+                  placeholder="e.g., NSU"
+                  required
                 />
               </div>
             </div>
             <div>
               <Label htmlFor="description">Description</Label>
-              <Textarea 
-                id="description" 
-                name="description" 
+              <Textarea
+                id="description"
+                name="description"
                 placeholder="Brief description of the club"
                 rows={3}
               />
             </div>
             <div>
               <Label htmlFor="color">Brand Color</Label>
-              <Input 
-                id="color" 
-                name="color" 
-                type="color" 
+              <Input
+                id="color"
+                name="color"
+                type="color"
                 defaultValue="#7D9E8E"
               />
             </div>
@@ -390,22 +405,22 @@ export function ClubRoster() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="username">Username/Email</Label>
-                  <Input 
-                    id="username" 
-                    name="username" 
+                  <Input
+                    id="username"
+                    name="username"
                     type="email"
-                    placeholder="clubname@uoregon.edu" 
-                    required 
+                    placeholder="clubname@uoregon.edu"
+                    required
                   />
                 </div>
                 <div>
                   <Label htmlFor="password">Password</Label>
-                  <Input 
-                    id="password" 
-                    name="password" 
+                  <Input
+                    id="password"
+                    name="password"
                     type="text"
-                    placeholder="Assign a password" 
-                    required 
+                    placeholder="Assign a password"
+                    required
                   />
                 </div>
               </div>
