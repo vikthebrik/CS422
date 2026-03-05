@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
@@ -9,38 +8,14 @@ import { requireAuth, requireRoot, AuthenticatedRequest } from './middleware/aut
 import { startCron } from './cron';
 
 // ---------------------------------------------------------------------------
-// Mailer — optional SMTP. If SMTP_HOST is not set, sendMail is a no-op.
+// Password reset — delegates to Supabase's built-in email delivery.
 // ---------------------------------------------------------------------------
-function makeTransporter() {
-  if (!process.env.SMTP_HOST) return null;
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT ?? 587),
-    secure: Number(process.env.SMTP_PORT ?? 587) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+async function sendPasswordReset(email: string) {
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${frontendUrl}/reset-password`,
   });
-}
-
-async function sendMail(to: string, subject: string, html: string) {
-  const transporter = makeTransporter();
-  if (!transporter) {
-    console.warn('[mailer] SMTP_HOST not set — skipping email to', to);
-    return;
-  }
-  try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
-      to,
-      subject,
-      html,
-    });
-    console.log('[mailer] Sent email to', to);
-  } catch (err: any) {
-    console.error('[mailer] Failed to send email to', to, '—', err.message);
-  }
+  if (error) console.error('[auth] sendPasswordReset failed for', email, '—', error.message);
 }
 
 // Creates a throwaway Supabase client for signInWithPassword so the shared
@@ -53,33 +28,6 @@ function makeAuthClient() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Email-change HMAC token helpers (24-hour expiry, signed with SYNC_SECRET)
-// ---------------------------------------------------------------------------
-function signEmailChangeToken(userId: string, newEmail: string): string {
-  const payload = { uid: userId, email: newEmail, exp: Date.now() + 24 * 60 * 60 * 1000 };
-  const b64 = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const secret = process.env.SYNC_SECRET ?? 'dev-secret';
-  const sig = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
-  return `${b64}.${sig}`;
-}
-
-function verifyEmailChangeToken(token: string): { uid: string; email: string } | null {
-  const dot = token.lastIndexOf('.');
-  if (dot < 0) return null;
-  const b64 = token.slice(0, dot);
-  const sig = token.slice(dot + 1);
-  const secret = process.env.SYNC_SECRET ?? 'dev-secret';
-  const expected = crypto.createHmac('sha256', secret).update(b64).digest('base64url');
-  if (sig !== expected) return null;
-  try {
-    const p = JSON.parse(Buffer.from(b64, 'base64url').toString());
-    if (!p.uid || !p.email || typeof p.exp !== 'number' || p.exp < Date.now()) return null;
-    return { uid: p.uid, email: p.email };
-  } catch {
-    return null;
-  }
-}
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -208,53 +156,12 @@ app.post('/auth/logout', (_req, res) => {
 });
 
 // POST /auth/forgot-password  { email }
-// Uses the admin generateLink API (no rate limit; each call invalidates previous tokens)
-// so users can request as many resets as needed — only the latest link works.
 app.post('/auth/forgot-password', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'email is required' });
 
-  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER;
-
-  try {
-    const { data: linkData, error } = await supabase.auth.admin.generateLink({
-      type: 'recovery',
-      email: email.trim().toLowerCase(),
-      options: { redirectTo: `${frontendUrl}/reset-password` },
-    });
-
-    if (error) {
-      console.error('forgot-password generateLink error:', error.message);
-    } else {
-      const resetUrl = (linkData as any)?.properties?.action_link;
-      if (resetUrl) {
-        await sendMail(
-          email,
-          'Reset your MCC Calendar Hub password',
-          `
-            <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-              <h2 style="color:#1d4ed8">Reset Your Password</h2>
-              <p>We received a request to reset the password for your account.
-                 Click the button below to set a new password. This link expires in 24 hours.</p>
-              <a href="${resetUrl}"
-                 style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
-                Reset Password
-              </a>
-              <p style="color:#6b7280;font-size:13px">
-                If you didn't request this, you can safely ignore this email — your password won't change.
-              </p>
-              ${fromEmail ? `<hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" /><p style="color:#9ca3af;font-size:11px">Sent from <strong>${fromEmail}</strong></p>` : ''}
-            </div>
-          `,
-        );
-      }
-    }
-  } catch (err: any) {
-    console.error('forgot-password error:', err.message);
-  }
-
   // Always return 200 to avoid leaking whether an email exists
+  await sendPasswordReset(email.trim().toLowerCase());
   res.json({ status: 'ok' });
 });
 
@@ -345,8 +252,7 @@ app.post('/auth/change-password', requireAuth, async (req: AuthenticatedRequest,
 });
 
 // POST /auth/change-email  { newEmail }
-// Authenticated club admin sends a confirmation email to the new address.
-// Does NOT update immediately — user must click the link.
+// Immediately updates the email and sends a Supabase password reset to the new address.
 app.post('/auth/change-email', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { newEmail } = req.body as { newEmail?: string };
   if (!newEmail?.trim()) return res.status(400).json({ error: 'newEmail is required' });
@@ -358,39 +264,22 @@ app.post('/auth/change-email', requireAuth, async (req: AuthenticatedRequest, re
 
   const userId = req.userId!;
   const normalizedNew = newEmail.trim().toLowerCase();
-  const token = signEmailChangeToken(userId, normalizedNew);
-  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  const confirmUrl = `${frontendUrl}/confirm-email?token=${encodeURIComponent(token)}`;
 
-  await sendMail(
-    normalizedNew,
-    'Confirm your new email address — MCC Calendar Hub',
-    `<p>Click the link below to confirm your new email address for MCC Calendar Hub.</p>
-     <p>This link expires in 24 hours.</p>
-     <p><a href="${confirmUrl}">${confirmUrl}</a></p>
-     <p>If you did not request this change, ignore this email.</p>`,
-  );
-
-  res.json({ status: 'confirmation_sent' });
-});
-
-// POST /auth/confirm-email  { token }
-// Public endpoint called by the frontend after the user clicks the confirmation link.
-app.post('/auth/confirm-email', async (req, res) => {
-  const { token } = req.body as { token?: string };
-  if (!token) return res.status(400).json({ error: 'token is required' });
-
-  const payload = verifyEmailChangeToken(token);
-  if (!payload) return res.status(400).json({ error: 'Invalid or expired confirmation link' });
-
-  const { uid, email: newEmail } = payload;
-
-  const { error } = await supabase.auth.admin.updateUserById(uid, { email: newEmail });
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    email: normalizedNew,
+    email_confirm: true,
+  });
   if (error) return res.status(500).json({ error: error.message });
 
-  await supabase.from('user_roles').update({ email: newEmail }).eq('user_id', uid);
+  await supabase.from('user_roles').update({ email: normalizedNew }).eq('user_id', userId);
+  await sendPasswordReset(normalizedNew);
 
-  res.json({ status: 'ok', email: newEmail });
+  res.json({ status: 'ok' });
+});
+
+// POST /auth/confirm-email — no longer used; kept as a stub for backwards compatibility.
+app.post('/auth/confirm-email', (_req, res) => {
+  res.json({ status: 'ok' });
 });
 
 
@@ -775,6 +664,7 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
       }
 
       await supabase.from('user_roles').update({ email: normalized }).eq('user_id', roleRow.user_id);
+      await sendPasswordReset(normalized);
     } else {
       // No user_roles row — check if an auth user with this email already exists
       const existing = allUsers.find(u => u.email?.toLowerCase() === normalized);
@@ -1176,42 +1066,10 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
     clearCacheKey('clubs:all');
 
-    // 5. Generate a password-set link and email it (best-effort)
-    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-    const { data: linkData } = await supabase.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-    });
-    const setPasswordUrl = (linkData as any)?.properties?.action_link ?? `${frontendUrl}/forgot-password`;
+    // 5. Send a Supabase password-set email (best-effort)
+    await sendPasswordReset(email);
 
-    const fromEmail = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? 'no-reply@supabase.io';
-
-    await sendMail(
-      email,
-      `Your MCC Calendar Hub account is ready — ${(club as any).name}`,
-      `
-        <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-          <h2 style="color:#1d4ed8">Welcome to MCC Calendar Hub!</h2>
-          <p>Your organization <strong>${(club as any).name}</strong> has been approved.</p>
-          <p>Click the button below to set your password and activate your account:</p>
-          <a href="${setPasswordUrl}"
-             style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
-            Set My Password
-          </a>
-          <p style="color:#6b7280;font-size:13px;margin-top:16px">
-            This link expires in 24 hours. If it has already expired, use the
-            <strong>Forgot Password</strong> option on the login page at
-            <a href="${frontendUrl}" style="color:#1d4ed8">${frontendUrl}</a>
-            to request a new one.
-          </p>
-          <p style="color:#6b7280;font-size:12px">Your login email is: <strong>${email}</strong></p>
-          <hr style="border:none;border-top:1px solid #e5e7eb;margin:16px 0" />
-          <p style="color:#9ca3af;font-size:11px">This email was sent from <strong>${fromEmail}</strong>.</p>
-        </div>
-      `,
-    );
-
-    res.json({ clubId: (club as any).id, clubName: (club as any).name, email, fromEmail });
+    res.json({ clubId: (club as any).id, clubName: (club as any).name, email });
   } catch (err: any) {
     res.status(500).json({ error: err.message ?? 'Approval failed' });
   }
@@ -1554,48 +1412,11 @@ app.patch('/clubs/:id/members/:memberId', requireAuth, async (req: Authenticated
   if (error) return res.status(500).json({ error: error.message });
   if (!data) return res.status(404).json({ error: 'Member not found' });
 
-  // If email was updated to a valid new email
+  // If email was updated, send a password reset (best-effort)
   if (email && email.trim() !== '') {
-    try {
-      const { data: listData } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-      const user = listData?.users?.find(u => u.email?.toLowerCase() === email.toLowerCase());
-
-      if (user) {
-        const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-        const { data: linkData } = await supabase.auth.admin.generateLink({
-          type: 'recovery',
-          email: user.email!,
-        });
-        const setPasswordUrl = (linkData as any)?.properties?.action_link ?? `${frontendUrl}/forgot-password`;
-
-        await sendMail(
-          user.email!,
-          `Reset Your MCC Calendar Hub Password`,
-          `
-            <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
-              <h2 style="color:#1d4ed8">MCC Calendar Hub Action Required</h2>
-              <p>Hello,</p>
-              <p>Your email has been associated with an organization member profile on the MCC Calendar Hub.</p>
-              <p>Click the button below to rest/set your password to access your account:</p>
-              <a href="${setPasswordUrl}"
-                 style="display:inline-block;background:#1d4ed8;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;margin:16px 0;font-size:15px">
-                Reset My Password
-              </a>
-              <p style="color:#666;font-size:14px;margin-top:24px">
-                If the button doesn't work, copy and paste this link into your browser:<br>
-                <span style="word-break:break-all;color:#4b5563">${setPasswordUrl}</span>
-              </p>
-              <p style="color:#999;font-size:12px;margin-top:32px">
-                If you did not expect this email, you can safely ignore it.
-              </p>
-            </div>
-          `
-        );
-      }
-    } catch (adminErr) {
-      console.error('Failed to send password reset email:', adminErr);
-      // Suppress error so that member profile still gets updated successfully 
-    }
+    sendPasswordReset(email.trim().toLowerCase()).catch(err =>
+      console.error('Failed to send password reset email:', err)
+    );
   }
 
   res.json(data);
