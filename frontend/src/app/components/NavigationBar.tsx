@@ -66,7 +66,7 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
               to="/"
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"
             >
-              <img src="/assets/Waving.png" alt="MCC Logo" className="h-9 w-9 object-contain bg-primary rounded-lg p-0.5" />
+              <img src="/assets/Waving.png" alt="MCC Logo" className="h-9 w-9 object-contain" />
               <div>
                 <h1 className="text-lg sm:text-xl">MCC Calendar Hub</h1>
                 <p className="text-xs text-muted-foreground hidden sm:block">
