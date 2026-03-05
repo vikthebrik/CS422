@@ -471,7 +471,7 @@ export function ClubManagement() {
                     </Select>
                     <Button
                       size="sm"
-                      className="bg-green-600 hover:bg-green-700 text-white"
+                      className=""
                       onClick={() => handleApprove(req)}
                       disabled={approvingId === req.id || rejectingId === req.id}
                     >
