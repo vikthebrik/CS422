@@ -1,3 +1,13 @@
+/**
+ * @file EmptyState.tsx
+ * @description Fallback UI shown on Dashboard when no events match the current filters.
+ *
+ * Two states:
+ * - `selectedClubs.length === 0`: prompts user to select clubs; shows "Show All Clubs" button
+ * - Events exist but filters exclude them: generic "adjust your filters" message
+ *
+ * Consumed by Dashboard.tsx.
+ */
 import { Calendar, Filter } from 'lucide-react';
 import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';

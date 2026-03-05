@@ -1,3 +1,12 @@
+/**
+ * @file ResetPassword.tsx
+ * @description Password reset completion page. Route: /reset-password
+ *
+ * Reads `token` or `token_hash` from the URL query string (Supabase supports both
+ * implicit-flow hash tokens and PKCE token_hash params). Calls
+ * POST /auth/reset-password { token, newPassword } to update the password.
+ * Linked from the reset email sent by ForgotPassword.tsx flow.
+ */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';

@@ -1,3 +1,12 @@
+/**
+ * @file RequestAccount.tsx
+ * @description Public form for organizations to request a club admin account. Route: /request-account
+ *
+ * Calls POST /auth/request-account { clubName, contactEmail, message? }.
+ * Inserts a row into the `account_requests` table with status 'pending'.
+ * Root admin reviews and approves/rejects requests in ClubManagement.tsx.
+ * Linked from LoginDialog.tsx.
+ */
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../components/ui/button';

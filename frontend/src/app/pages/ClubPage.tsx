@@ -1,3 +1,28 @@
+/**
+ * @file ClubPage.tsx
+ * @description Full detail page for a single club/organization. Route: /club/:clubId
+ *
+ * ## Sections
+ * - **Club Header**: logo, name, orgType badge, description, social links, admin email
+ * - **Events**: upcoming + past event list with local search + type filter. Admins/officers
+ *   see an "Add Event" button (POST /events → `addEvent` in AppContext).
+ * - **Our Team**: `OurTeam` component — public read, auth-gated CRUD for members
+ * - **Edit Modal** (canEdit only): PATCH /clubs/:id — updates description, social links,
+ *   ICS URL, name (admin only), logo (via `LogoUpload`). Calls `updateClub` on success.
+ * - **Create Event Modal**: shared between ClubPage and ClubManagement; sets `clubId`
+ *   to the current club by default.
+ *
+ * ## Auth / Permission
+ * `canEdit = currentUser.role === 'admin' || currentUser.clubId === clubId`
+ * Root admin can edit any club; club_admin can edit only their own.
+ *
+ * ## Key API Calls
+ * | Action         | Endpoint                  | Context mutation |
+ * |----------------|---------------------------|-----------------|
+ * | Save club info | PATCH /clubs/:id          | updateClub()    |
+ * | Create event   | POST /events              | addEvent()      |
+ * | Change email   | PATCH /admin/clubs/:id/email | updateClub()  |
+ */
 import { useParams, useNavigate } from 'react-router';
 import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X } from 'lucide-react';
 import { Button } from '../components/ui/button';

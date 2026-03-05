@@ -1,3 +1,18 @@
+/**
+ * @file ClubRoster.tsx
+ * @description Public directory of all MCC clubs and departments. Route: /clubs
+ *
+ * ## Sections
+ * - Search bar + org-type filter (All / Unions / Departments)
+ * - Club cards: logo, name, orgType badge, description, social link buttons
+ *   - Click → navigates to /club/:id
+ * - Admin: "Add Club" button → opens dialog (POST /clubs → `addClub`)
+ * - ICS export: download all events as .ics file (GET /events/ics with no filters)
+ *
+ * ## Data
+ * Reads `clubs` from AppContext (populated by useClubs hook).
+ * Filters are local state — no impact on the global dashboard filter.
+ */
 import { Users, ExternalLink, Plus, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';

@@ -1,3 +1,31 @@
+/**
+ * @file Dashboard.tsx
+ * @description Main calendar view — the default route ("/").
+ *
+ * ## Responsibilities
+ * - Reads filter state from AppContext and derives `filteredEvents` via useMemo
+ * - Renders CalendarGrid with the filtered event list
+ * - Opens EventDetailModal when a calendar event is clicked
+ * - Shows EmptyState when no clubs are selected or no events match filters
+ *
+ * ## Filter Logic (applied in order)
+ * 1. **Club filter**: keep events where `event.clubId` or any `collaborator.club_id`
+ *    is in `selectedClubs`
+ * 2. **Event type filter**:
+ *    - Normal mode: keep events whose `eventType` is in `selectedEventTypes`
+ *    - Advanced mode: per-club override — uses `perClubEventTypes[event.clubId]`
+ *      falling back to all `eventTypeNames` if no override set
+ * 3. **Search**: case-insensitive match on `event.title` or `event.description`
+ *
+ * ## Dependencies
+ * | Component        | Role                                   |
+ * |------------------|----------------------------------------|
+ * | CalendarGrid     | Renders day/week/month calendar views  |
+ * | EventDetailModal | Modal shown on event click             |
+ * | EmptyState       | Fallback when filteredEvents is empty  |
+ * | AppContext        | Provides events + all filter state     |
+ */
+
 import { useState, useMemo } from 'react';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { EventDetailModal } from '../components/EventDetailModal';

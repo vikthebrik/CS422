@@ -1,3 +1,28 @@
+/**
+ * @file About.tsx
+ * @description Block-based CMS page for MCC information. Route: /about
+ *
+ * ## Block Types (defined in types.ts)
+ * | Block type       | Rendered as                              |
+ * |------------------|------------------------------------------|
+ * | `text`           | Title + rich text paragraph              |
+ * | `media`          | Image or video with optional caption     |
+ * | `links`          | Titled grid of labeled link cards        |
+ * | `clubs`          | Club showcase — logo + name cards        |
+ *
+ * ## Data Storage
+ * Blocks are stored as a JSON array in `site_settings` table, key = `about-page`.
+ * Fetched via GET /site-settings/about-page on mount; saved via PUT /site-settings/about-page.
+ *
+ * ## Admin Editing (root admin only)
+ * A gear icon appears when `currentUser.role === 'admin'`. Admin can:
+ * - Edit text/title of any block inline
+ * - Reorder blocks up/down
+ * - Delete blocks
+ * - Add new blocks (text / media / links / clubs)
+ * - Upload media to Supabase Storage via POST /site-settings/upload (base64 → public URL)
+ * - Add/remove clubs from ClubShowcaseBlock (select from AppContext.clubs)
+ */
 /// <reference types="vite/client" />
 import { useState, useEffect, useRef, useCallback } from 'react';
 import {

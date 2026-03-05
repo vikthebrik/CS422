@@ -1,3 +1,70 @@
+/**
+ * @file index.ts
+ * @description Express REST API entry point for MCC Calendar Hub backend.
+ *
+ * ## Architecture
+ * ```
+ * Express app (port 4000 / $PORT)
+ *   ├── CORS: ALLOWED_ORIGINS env var + dynamic Vercel preview URLs
+ *   ├── Body parser: JSON up to 8mb (for base64 logo payloads)
+ *   ├── In-memory cache (TTL from CACHE_TTL_SECONDS) via cache.ts
+ *   ├── Auth middleware (middleware/auth.ts): JWT validation via Supabase
+ *   └── Routes (see sections below)
+ * ```
+ *
+ * ## Route Summary
+ *
+ * ### Public
+ * - `GET /clubs`              → cached list of all clubs
+ * - `GET /events`             → cached list of all events with collaborators
+ * - `GET /events/ics`         → ICS calendar file (filtered by ?filters=clubId:typeId,...)
+ * - `GET /event-types`        → list of event type categories
+ * - `GET /site-settings/:key` → CMS block content (About page, etc.)
+ *
+ * ### Auth (requireAuth — any valid JWT)
+ * - `POST /auth/login`        → returns JWT + user info
+ * - `GET  /auth/me`           → validates token, returns user
+ * - `POST /auth/forgot-password`    → triggers Supabase reset email
+ * - `POST /auth/reset-password`     → validates token, updates password
+ * - `POST /auth/request-account`    → inserts account_requests row
+ * - `POST /auth/change-email`       → sends HMAC confirmation link to new email
+ * - `POST /auth/confirm-email`      → validates confirmation token, applies change
+ * - `POST /auth/change-password`    → verifies current pw, updates in Supabase + user_roles
+ * - `PATCH /events/:id`       → edit event (root: any; club_admin: own only)
+ * - `DELETE /events/:id`      → delete event (same scope)
+ * - `POST /events`            → create event
+ * - `POST /events/:id/collaborators` → add collaborating club
+ * - `DELETE /events/:id/collaborators/:clubId` → remove collaborating club
+ * - `PATCH /clubs/:id`        → edit club info (root: any; club_admin: own only)
+ * - `POST /clubs/:id/logo`    → upload club logo to Supabase Storage
+ * - `GET /collab`             → collaborations for current user's club
+ * - `PATCH /collab/:id`       → accept or reject a collaboration
+ *
+ * ### Admin (requireRoot — DB role 'root')
+ * - `GET  /admin/users`       → list all club_admin accounts
+ * - `POST /admin/passwords/:userId` → force-set club admin password
+ * - `GET  /admin/requests`    → list account requests
+ * - `POST /admin/requests/:id/approve` → approve + create club + send credentials email
+ * - `POST /admin/requests/:id/reject`  → mark rejected
+ * - `DELETE /admin/requests`  → clear processed request history
+ * - `PATCH /admin/clubs/:id/email` → immediately change club admin email
+ * - `POST  /admin/users/:userId/email` → alias (ChangePassword.tsx "Change Email" for root)
+ * - `POST /clubs`             → create new club
+ * - `DELETE /clubs/:id`       → delete club + cascade events + user_roles
+ * - `POST /event-types`       → create event type
+ * - `PATCH /event-types/:id`  → rename event type
+ * - `DELETE /event-types/:id` → delete event type
+ * - `PUT  /site-settings/:key`        → upsert CMS block content
+ * - `POST /site-settings/upload`      → upload media to mcc-public-assets bucket
+ *
+ * ### Internal (x-sync-secret header, no JWT)
+ * - `POST /internal/cache/clear` → clears all cached responses (called by sync cron)
+ *
+ * ## Caching Strategy
+ * GET /clubs, GET /events, GET /event-types are cached in memory.
+ * Any mutation on those resources calls clearCacheKey() or clearAllCache().
+ * The sync cron also posts to /internal/cache/clear after each sync run.
+ */
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
@@ -1589,6 +1656,41 @@ app.patch('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
     if (error) throw error;
 
     clearCacheKey('events:all');
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /collab/:id — permanently remove a rejected collaboration record
+// ---------------------------------------------------------------------------
+app.delete('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    if (req.userRole === 'club_admin') {
+      const { data: collab } = await supabase
+        .from('collaborations')
+        .select('club_id, status')
+        .eq('id', id)
+        .single();
+
+      if (!collab || collab.club_id !== req.userClubId) {
+        return res.status(403).json({ error: 'Not authorized to delete this collaboration' });
+      }
+      if (collab.status !== 'rejected') {
+        return res.status(400).json({ error: 'Only rejected collaborations can be deleted' });
+      }
+    }
+
+    const { error } = await supabase
+      .from('collaborations')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

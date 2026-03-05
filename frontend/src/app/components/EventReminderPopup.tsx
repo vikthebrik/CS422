@@ -1,3 +1,19 @@
+/**
+ * @file EventReminderPopup.tsx
+ * @description Bottom-right toast popup showing today's / this-weekend's upcoming events.
+ *
+ * ## Behavior
+ * - Filters events where `eventType === 'Events'` and start time is within the
+ *   current day (or through Sunday if today is Fri/Sat/Sun).
+ * - Appears after a 1.5 s delay once events load, unless already dismissed today.
+ * - Dismissal is stored in `sessionStorage` keyed by today's date string, so it
+ *   resets each day.
+ * - Shows up to 3 event previews; additional count shown as "+N more".
+ * - Each event links to /event/:id and dismisses the popup on click.
+ *
+ * ## Consumed by
+ * Layout.tsx — rendered outside `<main>` so it overlays all page content.
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { X, Calendar, Clock, MapPin } from 'lucide-react';
 import { Link } from 'react-router';

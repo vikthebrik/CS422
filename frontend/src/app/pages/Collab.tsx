@@ -1,5 +1,30 @@
+/**
+ * @file Collab.tsx
+ * @description Collaboration management page for club officers. Route: /collab
+ *
+ * ## Purpose
+ * Club officers see events their club has been invited to co-host via Outlook
+ * Calendar sync (stored in the `collaborations` table). They can accept or reject
+ * each invite, and re-accept previously declined ones.
+ *
+ * ## Data Model (local — not from types.ts)
+ * `CollabRecord` is fetched from GET /collab (requireAuth). It contains the
+ * collaboration row joined with the event and hosting club data. It is distinct
+ * from the `CollaboratorInfo` type (which appears on Event objects) and from
+ * the manual collaborator management in EventPage.tsx.
+ *
+ * ## Sections
+ * - Stats: total / pending / unique active partnerships
+ * - Pending Invites: accept / reject buttons; each calls PATCH /collab/:id { status }
+ * - Declined Invites: re-accept option
+ * - Upcoming Collaborative Events: accepted collabs with navigate-to-event links
+ *
+ * ## Auth
+ * Protected by `ProtectedRoute` (any authenticated user). Only shows collabs
+ * relevant to the logged-in user's club (backend scopes by club_id from JWT).
+ */
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Clock, Check, X, Calendar, ExternalLink, RotateCcw } from 'lucide-react';
+import { Users, Clock, Check, X, Calendar, ExternalLink, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -49,6 +74,25 @@ export function Collab() {
   }, [authToken]);
 
   useEffect(() => { fetchCollabs(); }, [fetchCollabs]);
+
+  const handleDelete = async (collabId: string) => {
+    try {
+      const res = await fetch(`/api/collab/${collabId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setCollabs(prev => prev.filter(c => c.id !== collabId));
+    } catch (err: any) {
+      toast.error('Failed to remove declined invite');
+    }
+  };
+
+  const handleClearDeclined = async () => {
+    const ids = rejected.map(c => c.id);
+    await Promise.all(ids.map(id => handleDelete(id)));
+    toast.success('Declined invites cleared');
+  };
 
   const handleStatusChange = async (collabId: string, status: 'accepted' | 'rejected') => {
     try {
@@ -175,8 +219,16 @@ export function Collab() {
       {rejected.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Declined Invites</CardTitle>
-            <CardDescription>Collaborations you previously declined — you can re-accept them</CardDescription>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <CardTitle>Declined Invites</CardTitle>
+                <CardDescription>Collaborations you previously declined — you can re-accept them</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" onClick={handleClearDeclined}>
+                <Trash2 className="h-4 w-4 mr-1" />
+                Clear History
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -203,6 +255,9 @@ export function Collab() {
                       <Button size="sm" variant="outline" onClick={() => handleStatusChange(collab.id, 'accepted')}>
                         <RotateCcw className="h-4 w-4 mr-1" />
                         Re-accept
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => handleDelete(collab.id)}>
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>

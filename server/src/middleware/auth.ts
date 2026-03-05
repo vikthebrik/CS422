@@ -1,3 +1,30 @@
+/**
+ * @file auth.ts
+ * @description Express middleware for JWT authentication and role-based authorization.
+ *
+ * ## Middleware
+ *
+ * ### `requireAuth`
+ * - Extracts `Bearer <token>` from the Authorization header
+ * - Validates the JWT via Supabase `auth.getUser(token)`
+ * - Looks up `user_roles` to get `role` and `club_id`
+ * - Attaches `userId`, `userEmail`, `userRole`, `userClubId` to the request
+ * - Returns 401 if token is missing/invalid, 403 if no role row exists
+ *
+ * ### `requireRoot`
+ * Chains `requireAuth` then additionally checks `userRole === 'root'`.
+ * Returns 403 if the user is not the root admin.
+ *
+ * ## AuthenticatedRequest
+ * Extends `express.Request` with the populated auth fields. Used throughout
+ * index.ts to access `req.userRole`, `req.userClubId`, etc. in route handlers.
+ *
+ * ## DB Role Mapping
+ * | DB role    | Frontend role  | Access level                    |
+ * |------------|----------------|---------------------------------|
+ * | `root`     | `admin`        | All clubs, all events, admin UI |
+ * | `club_admin` | `club_officer` | Own club only                |
+ */
 import { Request, Response, NextFunction } from 'express';
 import { supabase } from '../db/supabase';
 

@@ -1,3 +1,34 @@
+/**
+ * @file Layout.tsx
+ * @description Shell layout component rendered for every route.
+ *
+ * ## Structure
+ * ```
+ * <div> (min-h-screen flex-col)
+ *   NavigationBar          sticky top bar — logo, auth, ThemeToggle
+ *   <div> (flex flex-1)
+ *     FilterSidebar        collapsible left panel — club/type/search filters
+ *     <main>               scrollable content area (max-w-[1200px])
+ *       tab nav            role-gated links (Dashboard / Club Roster / Collaborate / Clubs / About)
+ *       <Outlet />         active page component injected here by React Router
+ *   Toaster                sonner toast notification host
+ *   EventReminderPopup     bottom-right popup for today's / this-weekend's events
+ * ```
+ *
+ * ## Navigation Visibility Rules
+ * | Tab         | Visible when                          |
+ * |-------------|---------------------------------------|
+ * | Dashboard   | always                                |
+ * | Club Roster | always                                |
+ * | Collaborate | authenticated (any role)              |
+ * | Clubs       | admin role only                       |
+ * | About       | always                                |
+ *
+ * ## Sidebar
+ * On desktop (lg+) the sidebar is always visible (sticky).
+ * On mobile it slides in/out via `isSidebarOpen` toggled by the hamburger in NavigationBar.
+ */
+
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router';
 import { NavigationBar } from './NavigationBar';

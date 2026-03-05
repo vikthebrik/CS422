@@ -1,3 +1,30 @@
+/**
+ * @file constants.ts
+ * @description Shared utility functions for event queries and location mapping.
+ *
+ * ## Exports
+ *
+ * ### `getUpcomingClubEvents(events, clubId)`
+ * Returns up to `UPCOMING_EVENTS_LIMIT` future events for a club, sorted ascending.
+ * Includes events where the club is either the host (`event.clubId`) or a collaborator.
+ * Used by: `ClubPage.tsx`
+ *
+ * ### `getPastClubEvents(events, clubId)`
+ * Returns all past events for a club, sorted descending (most recent first).
+ * Includes host + collaborator events.
+ * Used by: `ClubPage.tsx`
+ *
+ * ### `getLocationUrl(location)`
+ * Determines the best map URL for a location string.
+ *
+ * Priority:
+ * 1. **Room code** (e.g. "EMU 119", "LLC 301") → UO map with room code search
+ * 2. **Known UO building name** (from `UO_BUILDINGS` list) → UO map with building search
+ * 3. **Anything else** → Google Maps with "University of Oregon" appended
+ *
+ * Used by: `EventDetailModal.tsx`, `EventPage.tsx`
+ */
+
 import type { Event } from './types';
 
 /** Max number of upcoming events to show in club event lists (club page, admin club view). */

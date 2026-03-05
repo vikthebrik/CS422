@@ -1,3 +1,36 @@
+/**
+ * @file useClubs.ts
+ * @description Data-fetching hook that retrieves all clubs from the backend.
+ *
+ * ## Data Flow
+ * ```
+ * GET /clubs (via Vite proxy → /api/clubs)
+ *   └─► ApiClub[] (snake_case DB fields)
+ *         └─► mapApiClub() → Club[] (camelCase frontend types)
+ *               └─► AppContext.clubs
+ * ```
+ *
+ * ## Color Assignment
+ * DB clubs carry no color column. Colors are assigned deterministically by
+ * array index from CLUB_COLORS, so club colors remain stable across re-fetches
+ * as long as the order from the API doesn't change.
+ * If `metadata_tags.color` is set on a DB row, that value takes precedence.
+ *
+ * ## API → Frontend Field Map
+ * | API field              | Club field       |
+ * |------------------------|------------------|
+ * | `logo_url`             | `logo`           |
+ * | `ics_source_url`       | `outlookLink`    |
+ * | `org_type`             | `orgType`        |
+ * | `admin_email`          | `adminEmail`     |
+ * | `social_links.instagram` | `instagram`    |
+ * | `social_links.linktree`  | `linktree`     |
+ * | `social_links.engage`    | `engage`       |
+ * | `metadata_tags.description` | `description` |
+ * | `metadata_tags.color`  | `color`          |
+ * | `metadata_tags.section_labels` | `sectionLabels` |
+ */
+
 import { useState, useEffect } from 'react';
 import { Club } from '../types';
 

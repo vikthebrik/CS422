@@ -1,3 +1,20 @@
+/**
+ * @file LoginDialog.tsx
+ * @description Modal login form for admin/club officer authentication.
+ *
+ * ## Flow
+ * 1. User enters email + password → POST /auth/login
+ * 2. On success: stores JWT via `setAuthToken`, stores user via `setCurrentUser`,
+ *    then navigates to /club-management (admin) or / (club officer).
+ * 3. On failure: shows toast with server error message.
+ *
+ * ## Links
+ * - "Forgot Password" → navigates to /forgot-password (closes dialog)
+ * - "Request Account" → navigates to /request-account (closes dialog)
+ *
+ * ## Consumed by
+ * NavigationBar.tsx — opened when "Admin Sign In" button is clicked.
+ */
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';

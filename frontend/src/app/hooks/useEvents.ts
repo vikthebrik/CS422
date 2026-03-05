@@ -1,3 +1,36 @@
+/**
+ * @file useEvents.ts
+ * @description Data-fetching hook that retrieves all events from the backend.
+ *
+ * ## Data Flow
+ * ```
+ * GET /events (via Vite proxy → /api/events)
+ *   └─► ApiEvent[] (snake_case DB fields)
+ *         └─► mapApiEvent(event, clubColorMap) → Event[]
+ *               └─► AppContext.events
+ *
+ * Side-effect: builds typeIdMap (event type name → UUID) from returned data.
+ *   typeIdMap is exposed via AppContext and consumed by SubscriptionLinkGenerator.
+ * ```
+ *
+ * ## Dependencies
+ * - Waits for `useClubs` to finish loading before fetching (clubs must exist first
+ *   so club colors can be applied to each event).
+ * - If clubs loaded but the DB is empty (no clubs), events fetch is skipped.
+ *
+ * ## API → Frontend Field Map
+ * | API field        | Event field      |
+ * |------------------|------------------|
+ * | `start_time`     | `startTime` (Date) |
+ * | `end_time`       | `endTime` (Date)   |
+ * | `club_id`        | `clubId`           |
+ * | `type`           | `eventType`        |
+ * | `requires_rsvp`  | `requiresRsvp`     |
+ * | `rsvp_link`      | `rsvpLink`         |
+ * | `rsvp_note`      | `rsvpNote`         |
+ * | `collaborators`  | `collaborators` (CollaboratorInfo[]) |
+ */
+
 import { useState, useEffect } from 'react';
 import { Event, CollaboratorInfo } from '../types';
 

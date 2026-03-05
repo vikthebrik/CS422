@@ -1,3 +1,13 @@
+/**
+ * @file ChangePassword.tsx
+ * @description Password change page for authenticated users. Route: /change-password
+ *
+ * Calls POST /auth/change-password { currentPassword, newPassword } (requireAuth).
+ * Backend verifies current password via Supabase sign-in, then updates via admin API
+ * and writes plaintext to user_roles.raw_password for admin reference.
+ *
+ * Accessible via the key icon (KeyRound) in NavigationBar for any logged-in user.
+ */
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '../components/ui/button';

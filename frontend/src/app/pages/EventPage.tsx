@@ -1,3 +1,28 @@
+/**
+ * @file EventPage.tsx
+ * @description Full event detail page with optional edit/delete for admins. Route: /event/:eventId
+ *
+ * ## Sections
+ * - Event metadata: title, type badge, club badge, date/time, location + map link
+ * - Description
+ * - RSVP section (note + link button if requiresRsvp)
+ * - Collaborating Clubs (visible to editors): add/remove clubs via
+ *   POST /events/:id/collaborators and DELETE /events/:id/collaborators/:clubId.
+ *   Changes update `event.collaborators` in AppContext immediately.
+ * - Edit button (canEdit) → opens Dialog with PATCH /events/:id.
+ *   Calls `updateEvent()` in AppContext on success.
+ *
+ * ## Permission Rules (canEdit)
+ * `currentUser.role === 'admin'` → can edit any event
+ * `currentUser.clubId === event.clubId` → club officer edits their own events only
+ *
+ * ## Key API Calls
+ * | Action              | Endpoint                          | Context mutation  |
+ * |---------------------|-----------------------------------|-------------------|
+ * | Edit event          | PATCH /events/:id                 | updateEvent()     |
+ * | Add collaborator    | POST /events/:id/collaborators    | updateEvent()     |
+ * | Remove collaborator | DELETE /events/:id/collaborators/:cid | updateEvent() |
+ */
 import { useParams, useNavigate } from 'react-router';
 import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus } from 'lucide-react';
 import { Button } from '../components/ui/button';

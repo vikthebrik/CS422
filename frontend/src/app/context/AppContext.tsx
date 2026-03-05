@@ -1,3 +1,41 @@
+/**
+ * @file AppContext.tsx
+ * @description Central application state provider for the MCC Calendar Hub.
+ *
+ * ## Architecture
+ * ```
+ * AppProvider
+ *   ├── useClubs()          → fetches GET /clubs, maps → Club[]
+ *   ├── useEvents(clubs)    → fetches GET /events after clubs load, maps → Event[]
+ *   │                         also builds typeIdMap (name → UUID) from event data
+ *   ├── GET /event-types    → populates eventTypeNames[], used by FilterSidebar
+ *   └── GET /auth/me        → validates stored JWT on mount, restores session
+ *
+ * Consumers (via useApp()):
+ *   Layout.tsx              reads currentUser to show role-gated nav tabs
+ *   NavigationBar.tsx       reads/writes currentUser + authToken (sign-out)
+ *   FilterSidebar.tsx       reads/writes selected*, advancedMode, perClubEventTypes
+ *   Dashboard.tsx           reads events + all filter state to build filteredEvents
+ *   ClubPage.tsx            reads clubs, events; calls addEvent / updateClub
+ *   ClubManagement.tsx      reads clubs, events; calls addClub / deleteEvent
+ *   EventPage.tsx           reads events, clubs; calls updateEvent
+ *   Collab.tsx              reads clubs, currentUser, authToken
+ * ```
+ *
+ * ## Auth Flow
+ * Token is stored under `mcc_auth_token` in localStorage. On mount, if a token
+ * exists, GET /auth/me is called to validate it and restore `currentUser`.
+ * `authReady` is false only during that initial validation; ProtectedRoute
+ * waits for it before deciding to redirect.
+ *
+ * ## Filter State
+ * - `selectedClubs`: which club IDs are visible on the dashboard calendar
+ * - `selectedEventTypes`: global event type filter (ignored when advancedMode=true)
+ * - `advancedMode`: when true, `perClubEventTypes` is used instead of selectedEventTypes
+ * - `perClubEventTypes`: Record<clubId, string[]> for per-club type overrides
+ * - `searchQuery`: full-text filter on event title + description
+ */
+
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { Event, Club, User } from '../types';
 import { useClubs } from '../hooks/useClubs';

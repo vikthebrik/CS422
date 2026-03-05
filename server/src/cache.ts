@@ -1,3 +1,19 @@
+/**
+ * @file cache.ts
+ * @description Simple in-memory TTL cache for API responses.
+ *
+ * Used by index.ts to cache GET /clubs, GET /events, and GET /event-types.
+ * Cache is cleared after any mutation or after each ICS sync run.
+ *
+ * ## Env
+ * `CACHE_TTL_SECONDS` — cache lifetime in seconds (default: 120)
+ *
+ * ## API
+ * - `getFromCache(key)` — returns cached value or null if missing/expired
+ * - `setInCache(key, value, ttlSeconds?)` — stores value with TTL
+ * - `clearCacheKey(key)` — evicts a single key (called after targeted mutations)
+ * - `clearAllCache()` — clears everything (called after sync or broad mutations)
+ */
 type CacheEntry<T> = {
   value: T;
   expiresAt: number;

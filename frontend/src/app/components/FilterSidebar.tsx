@@ -1,3 +1,36 @@
+/**
+ * @file FilterSidebar.tsx
+ * @description Left-panel filter controls for the event calendar.
+ *
+ * ## Responsibilities
+ * - **Search**: full-text search on event title + description (stored in AppContext.searchQuery)
+ * - **Event Types**: checkbox list of live event type names from AppContext.eventTypeNames
+ * - **Unions / Departments**: accordion sections with per-club checkboxes
+ * - **Advanced Mode**: toggle (Zap icon) switches from global event-type filtering
+ *   to `perClubEventTypes` — each visible club gets its own event type sub-list
+ * - **Reset Filters**: shown when any filter differs from "all selected" default
+ *
+ * ## Filter State (all in AppContext)
+ * | State              | Set by                    | Read by        |
+ * |--------------------|---------------------------|----------------|
+ * | searchQuery        | Input onChange            | Dashboard.tsx  |
+ * | selectedClubs      | club checkboxes           | Dashboard.tsx  |
+ * | selectedEventTypes | type checkboxes           | Dashboard.tsx  |
+ * | advancedMode       | Zap toggle                | Dashboard.tsx  |
+ * | perClubEventTypes  | per-club type checkboxes  | Dashboard.tsx  |
+ *
+ * ## Mobile Behavior
+ * - On mobile the sidebar is positioned `fixed` and slides in via `translate-x`.
+ * - A dark overlay renders behind it and closes it on click.
+ * - Layout.tsx owns the `isOpen` boolean and the hamburger toggle.
+ *
+ * ## Props
+ * | Prop    | Type       | Description                              |
+ * |---------|------------|------------------------------------------|
+ * | isOpen  | boolean    | Controls mobile slide-in visibility      |
+ * | onClose | () => void | Called when overlay or × button clicked  |
+ */
+
 import { X, Search, Zap, ZapOff } from 'lucide-react';
 import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';

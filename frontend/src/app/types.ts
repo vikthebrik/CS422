@@ -1,3 +1,28 @@
+/**
+ * @file types.ts
+ * @description Shared TypeScript types for the MCC Calendar Hub frontend.
+ *
+ * ## Type Relationships
+ * ```
+ * Club ──────────────┐
+ *   id               │   referenced by Event.clubId
+ *   color (palette)  │   color from useClubs deterministic palette
+ *   orgType          │   'union' | 'department'
+ *   social_links     │
+ *   sectionLabels    │   used by OurTeam.tsx for section header text
+ *                    │
+ * Event ─────────────┤
+ *   clubId ──────────┘   FK → Club.id
+ *   collaborators[]      CollaboratorInfo[] — other clubs on the event
+ *   eventType            string matched against eventTypeNames in AppContext
+ *   requiresRsvp         drives RSVP badge / link display in EventDetailModal
+ *
+ * Block (About page CMS)
+ *   TextBlock | MediaBlock | LinkContainerBlock | ClubShowcaseBlock
+ *   stored as JSON array in site_settings table (key = "about-page")
+ * ```
+ */
+
 export interface CollaboratorInfo {
   club_id: string;
   club_name: string;
@@ -46,18 +71,11 @@ export interface User {
   clubId?: string;
 }
 
-export interface CollabEvent {
-  id: string;
-  title: string;
-  partnerClubs: string[];
-  status: 'pending' | 'approved' | 'rejected';
-  proposedDate: Date;
-  proposedBy: string;
-  type?: 'club' | 'center'; // club = inter-club collaboration, center = MCC with other centers
-  partnerCenter?: string; // For center-level collaborations
-  eventId?: string; // Link to actual event if approved and created
-}
-
+/**
+ * Fallback event type list used in EventPage edit form when live event types
+ * haven't loaded from `/event-types` yet. The authoritative list lives in
+ * `AppContext.eventTypeNames` (fetched at runtime).
+ */
 export const EVENT_TYPES = [
   'Events',
   'Meetings',
@@ -66,7 +84,7 @@ export const EVENT_TYPES = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// About-page block types
+// About-page block types (CMS stored in site_settings table)
 // ---------------------------------------------------------------------------
 
 export interface TextBlock {

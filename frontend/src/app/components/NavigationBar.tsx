@@ -1,3 +1,25 @@
+/**
+ * @file NavigationBar.tsx
+ * @description Sticky top navigation bar rendered by Layout.tsx.
+ *
+ * ## Responsibilities
+ * - MCC logo + site name (links to Dashboard)
+ * - ThemeToggle (light / dark / system)
+ * - Auth section (right side):
+ *   - Unauthenticated → "Admin Sign In" button → opens LoginDialog
+ *   - Authenticated → club logo/name (links to /club/:id), key icon (→ /change-password), Sign Out
+ *
+ * ## Interactions
+ * - Reads `currentUser`, `clubs` from AppContext to display club name/logo
+ * - Calls `setCurrentUser(null)` + `setAuthToken(null)` on sign-out, then navigates to /
+ * - Hamburger button (mobile only) calls `onToggleSidebar` → passed up to Layout
+ *
+ * ## Props
+ * | Prop             | Type       | Description                              |
+ * |------------------|------------|------------------------------------------|
+ * | onToggleSidebar  | () => void | Toggles the mobile FilterSidebar         |
+ */
+
 import { Menu, LogOut, KeyRound } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { Button } from './ui/button';
@@ -108,7 +130,7 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
                 </Button>
               </div>
             ) : (
-              <Button 
+              <Button
                 onClick={() => setIsLoginOpen(true)}
                 className="bg-primary hover:bg-primary/90"
               >

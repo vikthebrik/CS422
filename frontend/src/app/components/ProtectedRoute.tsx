@@ -1,3 +1,23 @@
+/**
+ * @file ProtectedRoute.tsx
+ * @description Route guard for authenticated (and optionally role-gated) routes.
+ *
+ * ## Behavior
+ * 1. If `authReady` is false (token validation in progress on mount) → renders nothing
+ *    to prevent a flash redirect before the session is restored.
+ * 2. If no `currentUser` → redirects to "/" (homepage / Dashboard).
+ * 3. If `role` prop is provided and doesn't match `currentUser.role` → redirects to "/".
+ * 4. Otherwise → renders `<Outlet />` (the protected child route).
+ *
+ * ## Usage in App.tsx
+ * ```tsx
+ * // Any authenticated user
+ * { element: <ProtectedRoute />, children: [...] }
+ *
+ * // Root admin only
+ * { element: <ProtectedRoute role="admin" />, children: [...] }
+ * ```
+ */
 import { Navigate, Outlet } from 'react-router';
 import { useApp } from '../context/AppContext';
 

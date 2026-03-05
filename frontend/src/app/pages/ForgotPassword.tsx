@@ -1,3 +1,11 @@
+/**
+ * @file ForgotPassword.tsx
+ * @description Password reset request page. Route: /forgot-password
+ *
+ * Calls POST /auth/forgot-password { email } which triggers a Supabase reset
+ * email. The email contains a link to /reset-password.
+ * Linked from LoginDialog.tsx.
+ */
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../components/ui/button';

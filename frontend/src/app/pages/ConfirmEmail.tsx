@@ -1,3 +1,13 @@
+/**
+ * @file ConfirmEmail.tsx
+ * @description Email change confirmation landing page. Route: /confirm-email
+ *
+ * Club admins who initiate an email change via ChangePassword.tsx receive a
+ * signed confirmation link (24h TTL) sent to their new email. Clicking it
+ * lands here. Reads `token` from query params and calls
+ * POST /auth/confirm-email { token } to apply the email change in both
+ * Supabase Auth and user_roles table.
+ */
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';

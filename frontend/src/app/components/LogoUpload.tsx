@@ -1,3 +1,28 @@
+/**
+ * @file LogoUpload.tsx
+ * @description Reusable club logo upload component.
+ *
+ * ## Behavior
+ * - Accepts image files up to `MAX_SIZE_MB` (5 MB)
+ * - Downscales client-side to max 400×400 px using Canvas API, encoding as WebP @ 80%
+ * - POSTs the base64 data URL to POST /clubs/:id/logo (multipart body)
+ * - Backend uploads to Supabase Storage bucket `club-logos` and returns the public URL
+ * - Calls `onUploaded(newUrl)` so parent can update AppContext via `updateClub()`
+ *
+ * ## Used by
+ * - `ClubPage.tsx` — inside the club edit modal
+ * - `ClubManagement.tsx` — via a standalone logo dialog per club row
+ *
+ * ## Props
+ * | Prop         | Type                      | Description                             |
+ * |--------------|---------------------------|-----------------------------------------|
+ * | clubId       | string                    | Club UUID for the API path              |
+ * | currentLogo  | string \| undefined       | Current logo URL (displayed as preview) |
+ * | clubColor    | string                    | Fallback background when no logo        |
+ * | clubInitials | string                    | Fallback text when no logo              |
+ * | authToken    | string \| null            | Bearer token for authenticated upload   |
+ * | onUploaded   | (url: string) => void     | Called with the new logo URL on success |
+ */
 /// <reference types="vite/client" />
 import { useState, useRef } from 'react';
 import { Upload, RefreshCw, ImageIcon } from 'lucide-react';

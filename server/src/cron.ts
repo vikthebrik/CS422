@@ -1,3 +1,27 @@
+/**
+ * @file cron.ts
+ * @description In-process ICS sync scheduler using node-cron.
+ *
+ * ## Behavior
+ * - Runs on a configurable cron schedule (default: every 14 minutes).
+ * - Queries the DB for all clubs with a non-null `ics_source_url`.
+ * - Calls `populate()` (from populate_supabase.ts) for each club to parse
+ *   their Outlook ICS feed and upsert events into Supabase.
+ * - After all clubs are synced, clears the in-memory cache so the next API
+ *   request returns fresh data.
+ *
+ * ## Configuration
+ * SYNC_CRON_SCHEDULE env var (default: every 14 min — "every14" in cron notation)
+ * Override with any valid cron string, e.g. "0 * * * *" for hourly.
+ *
+ * ## Called from
+ * `server/src/index.ts` on startup: `startCron()`
+ *
+ * ## Sync details
+ * See `populate_supabase.ts` for the ICS parsing + upsert logic. The sync
+ * honours the `events.manually_edited` flag — manually edited fields
+ * (title, description, location, type_id) are not overwritten by the sync.
+ */
 import cron from 'node-cron';
 import { supabase } from './db/supabase';
 import { populate } from './scripts/populate_supabase';

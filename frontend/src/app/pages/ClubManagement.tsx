@@ -1,3 +1,39 @@
+/**
+ * @file ClubManagement.tsx
+ * @description Root-admin-only organization management page. Route: /club-management
+ *
+ * ## Sections
+ * - **Join Requests**: pending account requests from GET /admin/requests.
+ *   Approve (POST /admin/requests/:id/approve) or reject with confirmation dialogs.
+ *   History of approved/rejected requests shown in collapsible section.
+ * - **Add Organization**: form to create a new club (POST /clubs → `addClub`)
+ * - **Unions / Departments**: lists of all clubs with inline actions:
+ *   - Logo upload via `LogoUpload` component (PUT /clubs/:id/logo)
+ *   - Email change dialog (PATCH /admin/clubs/:id/email → `updateClub`)
+ *   - Delete with confirmation (DELETE /clubs/:id, cascades events + user_roles)
+ *   - Club name links navigate to /club/:id
+ * - **Event Types**: CRUD for event type categories (POST/PATCH/DELETE /event-types)
+ * - **Add Event button**: opens full event create dialog (POST /events → `addEvent`)
+ *
+ * ## Auth
+ * Protected by `ProtectedRoute role="admin"` in App.tsx — only root admin can access.
+ *
+ * ## Key API Calls (all require Bearer token)
+ * | Action              | Endpoint                       | Context mutation |
+ * |---------------------|--------------------------------|-----------------|
+ * | Fetch requests      | GET /admin/requests            | local state      |
+ * | Approve request     | POST /admin/requests/:id/approve | local state    |
+ * | Reject request      | POST /admin/requests/:id/reject  | local state    |
+ * | Clear history       | DELETE /admin/requests         | local state      |
+ * | Add club            | POST /clubs                    | addClub()        |
+ * | Delete club         | DELETE /clubs/:id              | deleteEvent() × n, then reload |
+ * | Change email        | PATCH /admin/clubs/:id/email   | updateClub()     |
+ * | Fetch event types   | GET /event-types               | local state      |
+ * | Add event type      | POST /event-types              | local state      |
+ * | Rename event type   | PATCH /event-types/:id         | local state      |
+ * | Delete event type   | DELETE /event-types/:id        | local state      |
+ * | Create event        | POST /events                   | addEvent()       |
+ */
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail } from 'lucide-react';

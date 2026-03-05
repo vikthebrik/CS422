@@ -1,3 +1,36 @@
+/**
+ * @file EventDetailModal.tsx
+ * @description Read-only event detail modal opened from Dashboard (CalendarGrid click).
+ *
+ * ## Displayed Fields
+ * - Title, event type badge, hosting club badge (colored)
+ * - Description
+ * - Date (formatted long-form)
+ * - Time range + computed duration in hours
+ * - Location + smart map link via `getLocationUrl()` (UO map or Google Maps)
+ * - RSVP section (only when `event.requiresRsvp === true`):
+ *   - RSVP note (if set)
+ *   - RSVP link button, or fallback "link coming soon" pill
+ * - Hosted by club name
+ *
+ * ## Dependencies
+ * | Dependency        | Purpose                                    |
+ * |-------------------|--------------------------------------------|
+ * | AppContext (clubs) | Looks up club by `event.clubId` for color/name |
+ * | constants.ts      | `getLocationUrl()` for smart map linking   |
+ *
+ * ## Props
+ * | Prop          | Type                      | Description                    |
+ * |---------------|---------------------------|--------------------------------|
+ * | event         | Event \| null             | Event to display; null = hidden |
+ * | open          | boolean                   | Controls Dialog open state     |
+ * | onOpenChange  | (open: boolean) => void   | Passed to Dialog for close     |
+ *
+ * ## Note
+ * For edit/delete actions on an event, see `EventPage.tsx` (/event/:eventId),
+ * which is the full event detail page with admin editing capabilities.
+ */
+
 import { Calendar, Clock, MapPin, Users, Ticket } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Badge } from './ui/badge';
@@ -31,7 +64,7 @@ export function EventDetailModal({ event, open, onOpenChange }: EventDetailModal
           <div className="flex items-center gap-2 flex-wrap">
             <Badge variant="secondary">{event.eventType}</Badge>
             {club && (
-              <Badge 
+              <Badge
                 className="text-white"
                 style={{ backgroundColor: club.color }}
               >

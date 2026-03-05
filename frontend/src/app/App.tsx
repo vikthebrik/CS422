@@ -1,3 +1,33 @@
+/**
+ * @file App.tsx
+ * @description Root application component. Wires routing, theme, and global state.
+ *
+ * ## Component Tree
+ * ```
+ * ThemeProvider (next-themes — light/dark/system)
+ *   └── AppProvider (AppContext — global events, clubs, auth, filter state)
+ *         └── RouterProvider
+ *               └── Layout (NavigationBar + FilterSidebar + tab nav + Toaster)
+ *                     ├── [public]  Dashboard        /
+ *                     ├── [public]  About            /about
+ *                     ├── [public]  ClubRoster       /clubs
+ *                     ├── [public]  ClubPage         /club/:clubId
+ *                     ├── [public]  EventPage        /event/:eventId
+ *                     ├── [public]  ForgotPassword   /forgot-password
+ *                     ├── [public]  ResetPassword    /reset-password
+ *                     ├── [public]  RequestAccount   /request-account
+ *                     ├── [public]  ConfirmEmail     /confirm-email
+ *                     ├── [auth]    Collab           /collab
+ *                     ├── [auth]    ChangePassword   /change-password
+ *                     └── [admin]   ClubManagement   /club-management
+ * ```
+ *
+ * ## Auth Guards
+ * `ProtectedRoute` with no `role` prop → any authenticated user.
+ * `ProtectedRoute role="admin"` → root admin only (DB role "root").
+ * Both variants wait for `authReady` before redirecting to avoid flash.
+ */
+
 import { RouterProvider, createBrowserRouter } from 'react-router';
 import { ThemeProvider } from 'next-themes';
 import { AppProvider } from './context/AppContext';

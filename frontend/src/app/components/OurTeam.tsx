@@ -1,3 +1,39 @@
+/**
+ * @file OurTeam.tsx
+ * @description Club member directory component embedded in ClubPage.
+ *
+ * ## Data Model (ClubMember)
+ * Stored in `club_members` table (migration 014). Fields:
+ * - `section`: 'exec' | 'board' | 'intern' (three tiers)
+ * - `name`, `title`, `email` (nullable), `photo_url` (nullable), `sort_order`
+ *
+ * ## Behavior
+ * - Public: renders three sections (exec / board / interns) with photo + name + title
+ * - Auth (canEdit): inline add/edit/delete via dialogs, photo upload (≤3MB, converted
+ *   to WebP via Canvas API before upload to `member-photos` Supabase bucket)
+ * - Email: click to copy to clipboard (no mailto, avoids spam crawlers)
+ * - Section labels are customizable per club via `sectionLabels` prop (root admin can
+ *   rename "Executive Team", "Board", "Interns" for department orgs)
+ *
+ * ## API Calls (all require Bearer token for write ops)
+ * | Action         | Endpoint                          |
+ * |----------------|-----------------------------------|
+ * | Fetch members  | GET /clubs/:id/members (public)   |
+ * | Add member     | POST /clubs/:id/members           |
+ * | Edit member    | PATCH /clubs/:id/members/:mid     |
+ * | Delete member  | DELETE /clubs/:id/members/:mid    |
+ * | Upload photo   | POST /clubs/:id/members/:mid/photo |
+ *
+ * ## Props
+ * | Prop                 | Type                                    | Description                     |
+ * |----------------------|-----------------------------------------|---------------------------------|
+ * | clubId               | string                                  | Club UUID                       |
+ * | canEdit              | boolean                                 | Show add/edit/delete controls   |
+ * | authToken            | string \| null                          | Bearer token for write API      |
+ * | orgType              | 'union' \| 'department'                 | Affects default section labels  |
+ * | sectionLabels        | { exec?, board?, intern? } \| undefined | Custom label overrides          |
+ * | onSectionLabelsChange| (labels) => void                        | Called when labels are updated  |
+ */
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Pencil, Trash2, Mail, Check, Upload, ImageIcon, X } from 'lucide-react';
 import { Button } from './ui/button';
