@@ -68,6 +68,7 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
@@ -76,14 +77,98 @@ import { startCron } from './cron';
 import { log, requestLogger } from './logger';
 
 // ---------------------------------------------------------------------------
-// Password reset — delegates to Supabase's built-in email delivery.
+// Password reset — generates a token_hash via admin API, sends branded email
+// via SMTP. Bypasses Supabase's built-in email (avoids PKCE redirect issues).
 // ---------------------------------------------------------------------------
 async function sendPasswordReset(email: string) {
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${frontendUrl}/reset-password`,
+
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: 'recovery',
+    email,
+    options: { redirectTo: `${frontendUrl}/reset-password` },
   });
-  if (error) log.error(`sendPasswordReset failed for ${email} — ${error.message}`);
+
+  if (error || !data?.properties?.hashed_token) {
+    log.error(`sendPasswordReset generateLink failed for ${email} — ${error?.message}`);
+    return;
+  }
+
+  const resetUrl = `${frontendUrl}/reset-password?token_hash=${data.properties.hashed_token}&type=recovery`;
+
+  if (!process.env.SMTP_HOST) {
+    log.warn(`SMTP not configured — skipping password reset email for ${email}`);
+    return;
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT ?? '587'),
+      secure: parseInt(process.env.SMTP_PORT ?? '587') === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM ?? '"MCC Calendar Hub" <noreply@uomcc.org>',
+      to: email,
+      subject: 'Reset your MCC Calendar Hub password',
+      html: buildResetEmail(resetUrl),
+    });
+  } catch (err: any) {
+    log.error(`sendPasswordReset email send failed for ${email} — ${err.message}`);
+  }
+}
+
+function buildResetEmail(resetUrl: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset your password</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background-color:#004F35;padding:32px;text-align:center;">
+              <img src="https://www.uomcc.org/assets/Looking%20Down.png" alt="" style="height:64px;width:64px;object-fit:contain;display:block;margin:0 auto 12px;" />
+              <div style="color:#ffffff;font-size:20px;font-weight:600;">MCC Calendar Hub</div>
+              <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-top:4px;">University of Oregon Multicultural Center</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 32px;text-align:center;">
+              <h2 style="margin:0 0 12px;font-size:22px;color:#111827;font-weight:600;">Reset Your Password</h2>
+              <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.6;">
+                We received a request to reset the password for your account.
+                Click the button below to choose a new password. This link expires in 24&nbsp;hours.
+              </p>
+              <a href="${resetUrl}" style="display:inline-block;background-color:#004F35;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                Reset Password
+              </a>
+              <p style="margin:28px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+                If you didn't request a password reset, you can safely ignore this email — your password won't change.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="border-top:1px solid #e5e7eb;padding:20px 32px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;">
+                MCC Calendar Hub &middot; University of Oregon<br>
+                <a href="https://www.uomcc.org" style="color:#004F35;text-decoration:none;">uomcc.org</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 // Creates a throwaway Supabase client for signInWithPassword so the shared
