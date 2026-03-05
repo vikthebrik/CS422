@@ -233,10 +233,14 @@ export function EventPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <div
-                className="w-12 h-12 rounded-lg flex items-center justify-center text-white"
+                className="w-12 h-12 rounded-lg flex items-center justify-center text-white overflow-hidden shrink-0"
                 style={{ backgroundColor: club.color }}
               >
-                <span className="text-lg">{club.name.substring(0, 2)}</span>
+                {club.logo ? (
+                  <img src={club.logo} alt={club.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-lg">{club.name.substring(0, 2)}</span>
+                )}
               </div>
               <div>
                 <div className="font-medium text-lg">{club.name}</div>
