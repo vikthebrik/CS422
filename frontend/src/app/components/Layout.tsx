@@ -43,7 +43,7 @@ export function Layout() {
             {/* Tab Navigation */}
             {visibleNavigation.length > 1 && (
               <div className="mb-6 border-b border-border">
-                <nav className="flex gap-4 overflow-x-auto">
+                <nav className="flex">
                   {visibleNavigation.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -51,15 +51,15 @@ export function Layout() {
                         key={item.name}
                         to={item.href}
                         className={`
-                          flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap
+                          flex flex-1 sm:flex-none items-center justify-center sm:justify-start gap-2 px-2 sm:px-4 py-3 border-b-2 transition-colors
                           ${isActive(item.href)
                             ? 'border-primary text-primary'
                             : 'border-transparent text-muted-foreground hover:text-foreground'
                           }
                         `}
                       >
-                        <Icon className="h-4 w-4" />
-                        {item.name}
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="hidden sm:inline whitespace-nowrap">{item.name}</span>
                       </Link>
                     );
                   })}

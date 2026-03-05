@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { EventDetailModal } from '../components/EventDetailModal';
-import { SubscriptionLinkGenerator } from '../components/SubscriptionLinkGenerator';
 import { EmptyState } from '../components/EmptyState';
 import { Event } from '../types';
 import { useApp } from '../context/AppContext';
@@ -88,8 +87,6 @@ export function Dashboard() {
       ) : (
         <CalendarGrid events={filteredEvents} onEventClick={handleEventClick} />
       )}
-
-      <SubscriptionLinkGenerator />
 
       <EventDetailModal
         event={selectedEvent}
