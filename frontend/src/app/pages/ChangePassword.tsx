@@ -76,7 +76,7 @@ export function ChangePassword() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.error ?? 'Failed to send confirmation email');
+        toast.error(data.error ?? 'Failed to update email');
         return;
       }
       setEmailSent(true);
@@ -151,13 +151,13 @@ export function ChangePassword() {
             <CardHeader>
               <CardTitle>Change Email</CardTitle>
               <CardDescription>
-                A confirmation link will be sent to your new email address.
+                Your email will be updated immediately and a password reset link sent to the new address.
               </CardDescription>
             </CardHeader>
             <CardContent>
               {emailSent ? (
                 <div className="text-sm text-green-600 dark:text-green-400 text-center py-2">
-                  Confirmation email sent! Check your new inbox and click the link to confirm.
+                  Email updated! A password reset link has been sent to your new address.
                 </div>
               ) : (
                 <form onSubmit={handleEmailSubmit} className="space-y-4">
