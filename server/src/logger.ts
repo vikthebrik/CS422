@@ -16,6 +16,27 @@
 import { Request, Response, NextFunction } from 'express';
 
 // ---------------------------------------------------------------------------
+// In-memory log ring buffer (last 200 entries, for the /status dashboard)
+// ---------------------------------------------------------------------------
+export interface LogEntry {
+  ts: string;
+  level: 'info' | 'success' | 'warn' | 'error' | 'cache' | 'cron' | 'auth' | 'http';
+  msg: string;
+}
+
+const LOG_BUFFER: LogEntry[] = [];
+const MAX_LOG_ENTRIES = 200;
+
+function pushLog(level: LogEntry['level'], msg: string) {
+  LOG_BUFFER.push({ ts: new Date().toISOString(), level, msg });
+  if (LOG_BUFFER.length > MAX_LOG_ENTRIES) LOG_BUFFER.shift();
+}
+
+export function getLogBuffer(): LogEntry[] {
+  return [...LOG_BUFFER];
+}
+
+// ---------------------------------------------------------------------------
 // ANSI color codes
 // ---------------------------------------------------------------------------
 const C = {
@@ -56,37 +77,44 @@ function pad(s: string, n: number): string {
 export const log = {
   /** General informational message (blue ℹ). */
   info(msg: string, ...rest: unknown[]): void {
+    pushLog('info', msg);
     console.log(`${prefix()} ${C.cyan}ℹ${C.reset}  ${msg}`, ...rest);
   },
 
   /** Success / positive event (green ✓). */
   success(msg: string, ...rest: unknown[]): void {
+    pushLog('success', msg);
     console.log(`${prefix()} ${C.green}✓${C.reset}  ${msg}`, ...rest);
   },
 
   /** Non-fatal warning (yellow ⚠). */
   warn(msg: string, ...rest: unknown[]): void {
+    pushLog('warn', msg);
     console.warn(`${prefix()} ${C.yellow}⚠${C.reset}  ${msg}`, ...rest);
   },
 
   /** Error or failure (red ✗). */
   error(msg: string, ...rest: unknown[]): void {
+    pushLog('error', msg);
     console.error(`${prefix()} ${C.red}✗${C.reset}  ${msg}`, ...rest);
   },
 
   /** Cache hit/miss — dim, for high-volume endpoints. */
   cache(hit: boolean, key: string): void {
+    pushLog('cache', `cache ${hit ? 'hit' : 'miss'}: ${key}`);
     const icon = hit ? `${C.green}●${C.reset}` : `${C.gray}○${C.reset}`;
     console.log(`${prefix()} ${icon}  cache ${hit ? 'hit' : 'miss'}: ${C.dim}${key}${C.reset}`);
   },
 
   /** Cron / sync events. */
   cron(msg: string, ...rest: unknown[]): void {
+    pushLog('cron', `[cron] ${msg}`);
     console.log(`${prefix()} ${C.blue}↻${C.reset}  ${C.bold}[cron]${C.reset} ${msg}`, ...rest);
   },
 
   /** Auth events (login, logout, token validation). */
   auth(msg: string, ...rest: unknown[]): void {
+    pushLog('auth', `[auth] ${msg}`);
     console.log(`${prefix()} ${C.cyan}🔑${C.reset} ${C.bold}[auth]${C.reset} ${msg}`, ...rest);
   },
 };
@@ -111,6 +139,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
     if (ar.userRole) {
       tag = `${C.gray}[${ar.userRole}${ar.userClubId ? ` · ${ar.userClubId.slice(0, 8)}` : ''}]${C.reset}`;
     }
+
+    pushLog('http', `${req.method} ${req.originalUrl} ${code} ${ms}ms${ar.userRole ? ` [${ar.userRole}]` : ''}`);
 
     const method = `${C.bold}${pad(req.method, 7)}${C.reset}`;
     const path   = pad(req.originalUrl, 40);

@@ -28,8 +28,29 @@ import { populate } from './scripts/populate_supabase';
 import { clearAllCache } from './cache';
 import { log } from './logger';
 
+// ---------------------------------------------------------------------------
+// Sync history (last 20 runs, for the /status dashboard)
+// ---------------------------------------------------------------------------
+export interface SyncRun {
+  startedAt: string;
+  completedAt: string;
+  durationMs: number;
+  succeeded: number;
+  failed: number;
+  clubs: Array<{ name: string; status: 'ok' | 'error'; error?: string }>;
+}
+
+const SYNC_HISTORY: SyncRun[] = [];
+const MAX_SYNC_HISTORY = 20;
+let CRON_SCHEDULE = '*/14 * * * *';
+
+export function getSyncHistory(): SyncRun[] { return [...SYNC_HISTORY]; }
+export function getCronSchedule(): string { return CRON_SCHEDULE; }
+
 async function runSync() {
   log.cron(`Starting scheduled sync`);
+  const startedAt = new Date().toISOString();
+  const startMs = Date.now();
 
   const { data: clubs, error } = await supabase
     .from('clubs')
@@ -45,30 +66,48 @@ async function runSync() {
 
   let succeeded = 0;
   let failed = 0;
+  const clubResults: SyncRun['clubs'] = [];
 
   for (const club of clubs) {
     try {
       await populate(club.name, club.ics_source_url!);
       log.cron(`Synced "${club.name}"`);
+      clubResults.push({ name: club.name, status: 'ok' });
       succeeded++;
     } catch (err: any) {
       log.error(`[cron] Failed to sync "${club.name}": ${err.message}`);
+      clubResults.push({ name: club.name, status: 'error', error: err.message });
       failed++;
     }
   }
 
   clearAllCache();
+  const completedAt = new Date().toISOString();
   log.cron(`Sync complete — ${succeeded} succeeded, ${failed} failed. Cache cleared.`);
+
+  SYNC_HISTORY.push({
+    startedAt,
+    completedAt,
+    durationMs: Date.now() - startMs,
+    succeeded,
+    failed,
+    clubs: clubResults,
+  });
+  if (SYNC_HISTORY.length > MAX_SYNC_HISTORY) SYNC_HISTORY.shift();
 }
 
 export function startCron() {
-  const schedule = process.env.SYNC_CRON_SCHEDULE ?? '*/14 * * * *';
+  CRON_SCHEDULE = process.env.SYNC_CRON_SCHEDULE ?? '*/14 * * * *';
 
-  if (!cron.validate(schedule)) {
-    log.error(`Invalid SYNC_CRON_SCHEDULE: "${schedule}". Cron not started.`);
+  if (!cron.validate(CRON_SCHEDULE)) {
+    log.error(`Invalid SYNC_CRON_SCHEDULE: "${CRON_SCHEDULE}". Cron not started.`);
     return;
   }
 
-  cron.schedule(schedule, runSync, { timezone: 'America/Los_Angeles' });
-  log.cron(`Sync scheduled: "${schedule}" (America/Los_Angeles)`);
+  cron.schedule(CRON_SCHEDULE, runSync, { timezone: 'America/Los_Angeles' });
+  log.cron(`Sync scheduled: "${CRON_SCHEDULE}" (America/Los_Angeles)`);
+}
+
+export async function triggerSync() {
+  return runSync();
 }

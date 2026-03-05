@@ -59,3 +59,14 @@ export function clearAllCache(): void {
   cache.clear();
 }
 
+export function getCacheStatus(): Array<{ key: string; expiresAt: number; ttlMs: number }> {
+  const now = Date.now();
+  const result = [];
+  for (const [key, entry] of cache.entries()) {
+    if (now <= entry.expiresAt) {
+      result.push({ key, expiresAt: entry.expiresAt, ttlMs: entry.expiresAt - now });
+    }
+  }
+  return result;
+}
+

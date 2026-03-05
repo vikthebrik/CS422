@@ -73,8 +73,9 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
 import { requireAuth, requireRoot, AuthenticatedRequest } from './middleware/auth';
-import { startCron } from './cron';
-import { log, requestLogger } from './logger';
+import { startCron, triggerSync, getSyncHistory, getCronSchedule } from './cron';
+import { log, requestLogger, getLogBuffer } from './logger';
+import { getCacheStatus } from './cache';
 
 // ---------------------------------------------------------------------------
 // Password reset — generates a token_hash via admin API, sends branded email
@@ -221,9 +222,6 @@ app.use(requestLogger);
 // ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
-app.get('/', (_req, res) => {
-  res.send('MCC Scheduler API is running');
-});
 
 // ---------------------------------------------------------------------------
 // Auth — all routes proxy through to Supabase Auth so the service key never
@@ -437,6 +435,280 @@ app.post('/auth/confirm-email', (_req, res) => {
 });
 
 
+// ---------------------------------------------------------------------------
+// GET / — Server status dashboard (HTML)
+// GET /status?secret=SYNC_SECRET — JSON status data
+// POST /admin/sync?secret=SYNC_SECRET — manually trigger ICS sync
+// ---------------------------------------------------------------------------
+const SERVER_START = new Date().toISOString();
+
+app.get('/status', (_req, res) => {
+  res.json({
+    serverStart: SERVER_START,
+    uptime: Math.floor(process.uptime()),
+    cronSchedule: getCronSchedule(),
+    cache: getCacheStatus(),
+    syncHistory: getSyncHistory(),
+    log: getLogBuffer().slice(-100),
+  });
+});
+
+app.post('/admin/sync', async (req, res) => {
+  const secret = (req.query.secret ?? req.headers['x-sync-secret']) as string | undefined;
+  if (!secret || secret !== process.env.SYNC_SECRET) {
+    return res.status(401).json({ error: 'Invalid or missing secret' });
+  }
+  res.json({ status: 'started' });
+  triggerSync().catch(err => log.error(`Manual sync failed: ${err.message}`));
+});
+
+app.get('/', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MCC API Console</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--green:#004F35;--green-light:#006644;--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--muted:#8b949e;--red:#f85149;--yellow:#d29922;--blue:#58a6ff;--teal:#39d353}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;font-size:14px;min-height:100vh}
+  header{background:var(--green);padding:16px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid rgba(255,255,255,0.1)}
+  header img{height:40px;width:40px;object-fit:contain;border-radius:6px}
+  header h1{font-size:18px;font-weight:600;color:#fff}
+  header p{font-size:12px;color:rgba(255,255,255,0.65);margin-top:2px}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  #uptime{font-size:12px;color:rgba(255,255,255,0.6);font-variant-numeric:tabular-nums}
+  main{padding:24px;max-width:1400px;margin:0 auto;display:grid;gap:20px;grid-template-columns:1fr 1fr}
+  .full{grid-column:1/-1}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .card-header h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .card-body{padding:18px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+  .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px}
+  .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+  .stat-value{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+  .ok{color:var(--teal)} .err{color:var(--red)} .warn{color:var(--yellow)} .info{color:var(--blue)} .muted{color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border)}
+  td{padding:8px 12px;border-bottom:1px solid rgba(48,54,61,0.5);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+  .badge-ok{background:rgba(57,211,83,0.15);color:var(--teal)}
+  .badge-err{background:rgba(248,81,73,0.15);color:var(--red)}
+  .badge-warn{background:rgba(210,153,34,0.15);color:var(--yellow)}
+  .badge-info{background:rgba(88,166,255,0.15);color:var(--blue)}
+  .badge-http{background:rgba(139,148,158,0.15);color:var(--muted)}
+  pre.log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+  .log-info{color:var(--blue)} .log-success{color:var(--teal)} .log-warn{color:var(--yellow)}
+  .log-error{color:var(--red)} .log-cron{color:#c9d1d9} .log-auth{color:#79c0ff}
+  .log-http{color:var(--muted)} .log-cache{color:#6e7681}
+  .sync-btn{background:var(--green);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer}
+  .sync-btn:hover{background:var(--green-light)}
+  .sync-btn:disabled{opacity:.5;cursor:not-allowed}
+  .locked{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--muted);text-align:center}
+  .locked svg{opacity:.4}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+  .dot-ok{background:var(--teal)} .dot-err{background:var(--red)}
+  #last-updated{font-size:11px;color:var(--muted)}
+  .cache-tag{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-family:monospace;font-size:12px;margin:2px}
+</style>
+</head>
+<body>
+<header>
+  <img src="https://www.uomcc.org/assets/Waving.png" alt="">
+  <div>
+    <h1>MCC API Console</h1>
+    <p>api.uomcc.org &nbsp;·&nbsp; University of Oregon Multicultural Center</p>
+  </div>
+  <div class="header-right">
+    <span id="uptime"></span>
+  </div>
+</header>
+<main id="main">
+  <div class="full" style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>
+</main>
+
+<script>
+let data = null;
+let pollTimer = null;
+
+fetchStatus();
+
+async function fetchStatus() {
+  try {
+    const r = await fetch('/status');
+    if (!r.ok) return;
+    data = await r.json();
+    render(data);
+    const el = document.getElementById('last-updated');
+    if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {}
+  clearTimeout(pollTimer);
+  pollTimer = setTimeout(fetchStatus, 5000);
+}
+
+function fmt(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function ago(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  return Math.floor(s/3600) + 'h ago';
+}
+
+function levelBadge(level) {
+  const map = {info:'info',success:'ok',warn:'warn',error:'err',cron:'info',auth:'info',http:'http',cache:'http'};
+  return '<span class="badge badge-' + (map[level]||'http') + '">' + level + '</span>';
+}
+
+function render(d) {
+  const last = d.syncHistory.length ? d.syncHistory[d.syncHistory.length-1] : null;
+  const totalSyncs = d.syncHistory.length;
+  const totalOk = d.syncHistory.reduce((a,s) => a+s.succeeded, 0);
+  const totalFail = d.syncHistory.reduce((a,s) => a+s.failed, 0);
+
+  document.getElementById('main').innerHTML = \`
+    <!-- Stats row -->
+    <div class="full card">
+      <div class="card-header">
+        <h2>Server</h2>
+        <span id="last-updated" class="muted"></span>
+      </div>
+      <div class="card-body">
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-label">Status</div>
+            <div class="stat-value ok"><span class="dot dot-ok"></span>Online</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value" id="uptime-card">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Started</div>
+            <div class="stat-value muted" style="font-size:13px;padding-top:4px">\${fmt(d.serverStart)}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Cron Schedule</div>
+            <div class="stat-value muted" style="font-size:14px;font-family:monospace;padding-top:4px">\${d.cronSchedule}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Last Sync</div>
+            <div class="stat-value \${last && last.failed===0?'ok':last?'warn':'muted'}" style="font-size:14px;padding-top:4px">\${last ? ago(last.completedAt) : 'None'}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Syncs (session)</div>
+            <div class="stat-value">\${totalSyncs}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Events Synced</div>
+            <div class="stat-value ok">\${totalOk}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Sync Errors</div>
+            <div class="stat-value \${totalFail>0?'err':'muted'}">\${totalFail}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sync history + Cache -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Sync History</h2>
+        <button class="sync-btn" id="sync-btn" onclick="triggerSync()">▶ Run Now</button>
+      </div>
+      <div class="card-body" style="padding:0">
+        \${d.syncHistory.length === 0
+          ? '<p style="padding:18px;color:var(--muted)">No syncs yet this session.</p>'
+          : '<table><thead><tr><th>Time</th><th>Duration</th><th>OK</th><th>Failed</th><th>Clubs</th></tr></thead><tbody>'
+            + [...d.syncHistory].reverse().map(s => \`
+              <tr>
+                <td style="white-space:nowrap">\${fmt(s.completedAt)}</td>
+                <td class="muted">\${s.durationMs}ms</td>
+                <td class="ok">\${s.succeeded}</td>
+                <td class="\${s.failed>0?'err':'muted'}">\${s.failed}</td>
+                <td>\${s.clubs.map(c => '<span title="'+(c.error||'')+'" class="cache-tag \${c.status==="ok"?"ok":"err"}">'+ c.name +'</span>').join('')}</td>
+              </tr>\`).join('')
+            + '</tbody></table>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h2>Cache</h2></div>
+      <div class="card-body">
+        \${d.cache.length === 0
+          ? '<p class="muted">Cache is empty.</p>'
+          : '<table><thead><tr><th>Key</th><th>Expires in</th></tr></thead><tbody>'
+            + d.cache.map(c => \`
+              <tr>
+                <td><span class="cache-tag">\${c.key}</span></td>
+                <td class="ok">\${Math.round(c.ttlMs/1000)}s</td>
+              </tr>\`).join('')
+            + '</tbody></table>'}
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="full card">
+      <div class="card-header"><h2>Application Log</h2><span class="muted" style="font-size:12px">Last 100 entries · auto-refreshes every 5s</span></div>
+      <div class="card-body" style="padding:0 18px 18px">
+        <pre class="log" id="log-pre">\${[...d.log].reverse().map(e =>
+          '<span class="log-'+e.level+'">['+e.ts.replace('T',' ').slice(0,19)+'] ['+e.level.toUpperCase().padEnd(7)+'] '+escHtml(e.msg)+'</span>'
+        ).join('\\n')}</pre>
+      </div>
+    </div>
+  \`;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function triggerSync() {
+  const secret = prompt('Enter sync secret:');
+  if (!secret) return;
+  const btn = document.getElementById('sync-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Running…'; }
+  try {
+    const r = await fetch('/admin/sync?secret=' + encodeURIComponent(secret), { method: 'POST' });
+    if (r.status === 401) { alert('Incorrect secret.'); return; }
+    setTimeout(fetchStatus, 2000);
+  } finally {
+    setTimeout(() => {
+      if (btn) { btn.disabled = false; btn.textContent = '▶ Run Now'; }
+    }, 3000);
+  }
+}
+
+// Live uptime counter
+setInterval(() => {
+  if (!data) {
+    const el = document.getElementById('uptime');
+    if (el) el.textContent = '';
+    return;
+  }
+  const s = Math.floor((Date.now() - new Date(data.serverStart)) / 1000);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
+  const str = (h?h+'h ':'') + (m?m+'m ':'') + sec+'s';
+  const el1 = document.getElementById('uptime');
+  const el2 = document.getElementById('uptime-card');
+  if (el1) el1.textContent = 'Up ' + str;
+  if (el2) el2.textContent = str;
+}, 1000);
+</script>
+</body>
+</html>`);
+});
+
+// ---------------------------------------------------------------------------
 // POST /auth/request-account  { clubName, contactEmail, message? }
 // Publicly accessible — lets clubs without an account submit a request.
 app.post('/auth/request-account', async (req, res) => {
