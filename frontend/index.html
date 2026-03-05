@@ -4,8 +4,32 @@
     <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>MCC Calendar</title>
-      <link rel="icon" type="image/png" href="/Waving.png" />
+      <title>MCC Calendar Hub</title>
+      <meta name="description" content="The Multicultural Center event calendar for the University of Oregon." />
+      <link rel="icon" type="image/png" href="/assets/Walking.png" />
+
+      <!-- Restore palette before first paint to prevent flash -->
+      <script>
+        (function () {
+          var p = localStorage.getItem('mcc_palette');
+          if (p && p !== 'original') document.documentElement.dataset.palette = p;
+        })();
+      </script>
+
+      <!-- Open Graph (link previews in Slack, iMessage, Discord, etc.) -->
+      <meta property="og:title" content="MCC Calendar Hub" />
+      <meta property="og:description" content="The Multicultural Center event calendar for the University of Oregon." />
+      <meta property="og:image" content="https://calendar.uomcc.org/og-preview.png" />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:url" content="https://calendar.uomcc.org" />
+      <meta property="og:type" content="website" />
+
+      <!-- Twitter / X card -->
+      <meta name="twitter:card" content="summary_large_image" />
+      <meta name="twitter:title" content="MCC Calendar Hub" />
+      <meta name="twitter:description" content="The Multicultural Center event calendar for the University of Oregon." />
+      <meta name="twitter:image" content="https://calendar.uomcc.org/og-preview.png" />
     </head>
 
     <body>

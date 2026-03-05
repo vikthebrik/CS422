@@ -280,7 +280,7 @@ export function ClubManagement() {
         id: data.id,
         name: data.name,
         orgType: data.org_type ?? newOrgType,
-        color: '#94a3b8',
+        color: '#7D9E8E',
         description: newDescription.trim() || undefined,
       });
 

@@ -1,7 +1,60 @@
 @custom-variant dark (&:is(.dark *));
 
+/* ============================================================
+   SHARED TOKEN MAP — always references the current active vars.
+   All palette blocks below override these var names.
+   ============================================================ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-input-background: var(--input-background);
+  --color-switch-background: var(--switch-background);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+/* ============================================================
+   PALETTE 1 — MCC Original  (default / :root)
+   Forest green + bright yellow. The original MCC brand palette.
+   ============================================================ */
 :root {
   --font-size: 16px;
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+
   --background: #f5f5f5;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
@@ -48,14 +101,12 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.185 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* MCC green — lighter shade for dark backgrounds */
   --primary: oklch(0.62 0.1 158);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  /* Muted gold accent that works on dark bg */
   --accent: oklch(0.82 0.13 89);
   --accent-foreground: oklch(0.145 0 0);
   --destructive: oklch(0.55 0.2 25);
@@ -65,8 +116,6 @@
   --input-background: oklch(0.22 0 0);
   --switch-background: oklch(0.35 0 0);
   --ring: oklch(0.62 0.1 158);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -82,47 +131,255 @@
   --sidebar-ring: oklch(0.62 0.1 158);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-input-background: var(--input-background);
-  --color-switch-background: var(--switch-background);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+/* ============================================================
+   PALETTE 2 — Analog
+   Warm parchment, muted sage green, dusty amber. Calm, print-like.
+   ============================================================ */
+[data-palette="analog"] {
+  --font-display: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-body: 'Source Sans 3', ui-sans-serif, system-ui, sans-serif;
+
+  --background: #F6F2EB;
+  --foreground: #2C2826;
+  --card: #FDFAF4;
+  --card-foreground: #2C2826;
+  --popover: #FDFAF4;
+  --popover-foreground: #2C2826;
+  --primary: #5E7C6E;
+  --primary-foreground: #FDFAF4;
+  --secondary: #E8E2D6;
+  --secondary-foreground: #2C2826;
+  --muted: #EDE7DC;
+  --muted-foreground: #7A6F62;
+  --accent: #C99A6E;
+  --accent-foreground: #2C2826;
+  --destructive: #A85858;
+  --destructive-foreground: #FDFAF4;
+  --border: rgba(120, 110, 95, 0.22);
+  --input: transparent;
+  --input-background: #EDE7DC;
+  --switch-background: #C5BBAD;
+  --ring: #5E7C6E;
+  --chart-1: #C99A6E;
+  --chart-2: #7D9E8E;
+  --chart-3: #8DA3BC;
+  --chart-4: #BC9898;
+  --chart-5: #9E9EBC;
+  --radius: 0.5rem;
+  --sidebar: #EDE7DC;
+  --sidebar-foreground: #2C2826;
+  --sidebar-primary: #5E7C6E;
+  --sidebar-primary-foreground: #FDFAF4;
+  --sidebar-accent: #E4DDD0;
+  --sidebar-accent-foreground: #2C2826;
+  --sidebar-border: rgba(120, 110, 95, 0.2);
+  --sidebar-ring: #5E7C6E;
 }
 
+[data-palette="analog"].dark {
+  --background: #1E1C18;
+  --foreground: #E8E0D4;
+  --card: #26231E;
+  --card-foreground: #E8E0D4;
+  --popover: #26231E;
+  --popover-foreground: #E8E0D4;
+  --primary: #87A896;
+  --primary-foreground: #1E1C18;
+  --secondary: #2E2A23;
+  --secondary-foreground: #E8E0D4;
+  --muted: #2E2A23;
+  --muted-foreground: #998E81;
+  --accent: #C99A6E;
+  --accent-foreground: #1E1C18;
+  --destructive: #B56565;
+  --destructive-foreground: #E8E0D4;
+  --border: rgba(200, 185, 165, 0.13);
+  --input: rgba(200, 185, 165, 0.08);
+  --input-background: #2A2720;
+  --switch-background: #45403A;
+  --ring: #87A896;
+  --chart-1: #C99A6E;
+  --chart-2: #87A896;
+  --chart-3: #8DA3BC;
+  --chart-4: #BC9898;
+  --chart-5: #9E9EBC;
+  --sidebar: #232018;
+  --sidebar-foreground: #E8E0D4;
+  --sidebar-primary: #87A896;
+  --sidebar-primary-foreground: #1E1C18;
+  --sidebar-accent: #2A2720;
+  --sidebar-accent-foreground: #E8E0D4;
+  --sidebar-border: rgba(200, 185, 165, 0.1);
+  --sidebar-ring: #87A896;
+}
+
+/* ============================================================
+   PALETTE 3 — Slate
+   Cool navy and blue-grey. Clean, professional.
+   ============================================================ */
+[data-palette="slate"] {
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+
+  --background: #EEF2F7;
+  --foreground: #1A2332;
+  --card: #FFFFFF;
+  --card-foreground: #1A2332;
+  --popover: #FFFFFF;
+  --popover-foreground: #1A2332;
+  --primary: #2D4E8A;
+  --primary-foreground: #FFFFFF;
+  --secondary: #DDE4EE;
+  --secondary-foreground: #1A2332;
+  --muted: #DDE4EE;
+  --muted-foreground: #5A6E87;
+  --accent: #4A84C4;
+  --accent-foreground: #FFFFFF;
+  --destructive: #C0392B;
+  --destructive-foreground: #FFFFFF;
+  --border: rgba(45, 78, 138, 0.15);
+  --input: transparent;
+  --input-background: #DDE4EE;
+  --switch-background: #A8B8CC;
+  --ring: #2D4E8A;
+  --chart-1: #4A84C4;
+  --chart-2: #2D4E8A;
+  --chart-3: #7BAFD4;
+  --chart-4: #5BBFB5;
+  --chart-5: #8B9EC4;
+  --radius: 0.5rem;
+  --sidebar: #DDE4EE;
+  --sidebar-foreground: #1A2332;
+  --sidebar-primary: #2D4E8A;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #D0DAE8;
+  --sidebar-accent-foreground: #1A2332;
+  --sidebar-border: rgba(45, 78, 138, 0.12);
+  --sidebar-ring: #2D4E8A;
+}
+
+[data-palette="slate"].dark {
+  --background: #0E1623;
+  --foreground: #D4DEEB;
+  --card: #162030;
+  --card-foreground: #D4DEEB;
+  --popover: #162030;
+  --popover-foreground: #D4DEEB;
+  --primary: #6B9FD4;
+  --primary-foreground: #0E1623;
+  --secondary: #1E2D40;
+  --secondary-foreground: #D4DEEB;
+  --muted: #1E2D40;
+  --muted-foreground: #7A93AA;
+  --accent: #4A84C4;
+  --accent-foreground: #D4DEEB;
+  --destructive: #C0392B;
+  --destructive-foreground: #D4DEEB;
+  --border: rgba(107, 159, 212, 0.12);
+  --input: rgba(107, 159, 212, 0.08);
+  --input-background: #1A2840;
+  --switch-background: #2E4560;
+  --ring: #6B9FD4;
+  --chart-1: #6B9FD4;
+  --chart-2: #4A84C4;
+  --chart-3: #7BAFD4;
+  --chart-4: #5BBFB5;
+  --chart-5: #8B9EC4;
+  --sidebar: #111C2A;
+  --sidebar-foreground: #D4DEEB;
+  --sidebar-primary: #6B9FD4;
+  --sidebar-primary-foreground: #0E1623;
+  --sidebar-accent: #1A2840;
+  --sidebar-accent-foreground: #D4DEEБ;
+  --sidebar-border: rgba(107, 159, 212, 0.1);
+  --sidebar-ring: #6B9FD4;
+}
+
+/* ============================================================
+   PALETTE 4 — Dusk
+   Soft lavender and dusty violet. Calm, evening-like.
+   ============================================================ */
+[data-palette="dusk"] {
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+
+  --background: #F2EEF7;
+  --foreground: #22183A;
+  --card: #FAF8FD;
+  --card-foreground: #22183A;
+  --popover: #FAF8FD;
+  --popover-foreground: #22183A;
+  --primary: #6B4A9E;
+  --primary-foreground: #FAF8FD;
+  --secondary: #E4DCEF;
+  --secondary-foreground: #22183A;
+  --muted: #E4DCEF;
+  --muted-foreground: #6E5F82;
+  --accent: #A8729A;
+  --accent-foreground: #FAF8FD;
+  --destructive: #A8485A;
+  --destructive-foreground: #FAF8FD;
+  --border: rgba(107, 74, 158, 0.15);
+  --input: transparent;
+  --input-background: #E4DCEF;
+  --switch-background: #BAA8CC;
+  --ring: #6B4A9E;
+  --chart-1: #A8729A;
+  --chart-2: #6B4A9E;
+  --chart-3: #8B7ABF;
+  --chart-4: #C498A8;
+  --chart-5: #7AABBA;
+  --radius: 0.5rem;
+  --sidebar: #E4DCEF;
+  --sidebar-foreground: #22183A;
+  --sidebar-primary: #6B4A9E;
+  --sidebar-primary-foreground: #FAF8FD;
+  --sidebar-accent: #DAD0EA;
+  --sidebar-accent-foreground: #22183A;
+  --sidebar-border: rgba(107, 74, 158, 0.12);
+  --sidebar-ring: #6B4A9E;
+}
+
+[data-palette="dusk"].dark {
+  --background: #130E20;
+  --foreground: #DDD6EE;
+  --card: #1C1530;
+  --card-foreground: #DDD6EE;
+  --popover: #1C1530;
+  --popover-foreground: #DDD6EE;
+  --primary: #A07ACC;
+  --primary-foreground: #130E20;
+  --secondary: #271E3E;
+  --secondary-foreground: #DDD6EE;
+  --muted: #271E3E;
+  --muted-foreground: #8A7AA0;
+  --accent: #A8729A;
+  --accent-foreground: #DDD6EE;
+  --destructive: #A8485A;
+  --destructive-foreground: #DDD6EE;
+  --border: rgba(160, 122, 204, 0.13);
+  --input: rgba(160, 122, 204, 0.08);
+  --input-background: #221848;
+  --switch-background: #3A2A5A;
+  --ring: #A07ACC;
+  --chart-1: #A8729A;
+  --chart-2: #A07ACC;
+  --chart-3: #8B7ABF;
+  --chart-4: #C498A8;
+  --chart-5: #7AABBA;
+  --sidebar: #100C1C;
+  --sidebar-foreground: #DDD6EE;
+  --sidebar-primary: #A07ACC;
+  --sidebar-primary-foreground: #130E20;
+  --sidebar-accent: #221848;
+  --sidebar-accent-foreground: #DDD6EE;
+  --sidebar-border: rgba(160, 122, 204, 0.1);
+  --sidebar-ring: #A07ACC;
+}
+
+/* ============================================================
+   BASE TYPOGRAPHY — uses active font vars from the palette
+   ============================================================ */
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -130,33 +387,32 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
   }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
 
   html {
     font-size: var(--font-size);
   }
 
   h1 {
+    font-family: var(--font-display);
     font-size: var(--text-2xl);
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   h2 {
+    font-family: var(--font-display);
     font-size: var(--text-xl);
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   h3 {
+    font-family: var(--font-display);
     font-size: var(--text-lg);
     font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    line-height: 1.4;
   }
 
   h4 {

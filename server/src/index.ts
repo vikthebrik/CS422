@@ -73,6 +73,7 @@ import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
 import { requireAuth, requireRoot, AuthenticatedRequest } from './middleware/auth';
 import { startCron } from './cron';
+import { log, requestLogger } from './logger';
 
 // ---------------------------------------------------------------------------
 // Password reset — delegates to Supabase's built-in email delivery.
@@ -82,7 +83,7 @@ async function sendPasswordReset(email: string) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${frontendUrl}/reset-password`,
   });
-  if (error) console.error('[auth] sendPasswordReset failed for', email, '—', error.message);
+  if (error) log.error(`sendPasswordReset failed for ${email} — ${error.message}`);
 }
 
 // Creates a throwaway Supabase client for signInWithPassword so the shared
@@ -130,6 +131,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '8mb' })); // increased for base64 logo uploads
+app.use(requestLogger);
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -1698,11 +1700,29 @@ app.delete('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
 });
 
 // ---------------------------------------------------------------------------
+// 404 — no route matched
+// ---------------------------------------------------------------------------
+app.use((req: express.Request, res: express.Response) => {
+  log.warn(`404 ${req.method} ${req.originalUrl}`);
+  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// ---------------------------------------------------------------------------
+// Global error handler — catches anything thrown/next(err)'d in route handlers
+// ---------------------------------------------------------------------------
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  log.error(`Unhandled error on ${req.method} ${req.originalUrl}: ${err?.message ?? err}`);
+  if (err?.stack) log.error(err.stack);
+  const status = typeof err?.status === 'number' ? err.status : 500;
+  res.status(status).json({ error: err?.message ?? 'Internal server error' });
+});
+
+// ---------------------------------------------------------------------------
 // Start
 // ---------------------------------------------------------------------------
 if (require.main === module) {
   app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    log.success(`MCC API running on http://localhost:${PORT}`);
     startCron();
   });
 }

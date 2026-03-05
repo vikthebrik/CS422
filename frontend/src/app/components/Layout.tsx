@@ -45,7 +45,7 @@ export function Layout() {
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Calendar, public: true },
-    { name: 'Club Roster', href: '/clubs', icon: BookOpen, public: true },
+    { name: 'Org Roster', href: '/clubs', icon: BookOpen, public: true },
     { name: 'Collaborate', href: '/collab', icon: Users, roles: ['admin', 'club_officer'] },
     { name: 'Clubs', href: '/club-management', icon: Building2, roles: ['admin'] },
     { name: 'About', href: '/about', icon: Info, public: true },

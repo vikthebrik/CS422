@@ -13,7 +13,7 @@
  * Reads `clubs` from AppContext (populated by useClubs hook).
  * Filters are local state — no impact on the global dashboard filter.
  */
-import { Users, ExternalLink, Plus, Download } from 'lucide-react';
+import { Users, ExternalLink, Plus, Download, Search, Building2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
@@ -129,6 +129,24 @@ export function ClubRoster() {
     setIsDownloadOpen(false);
   };
 
+  const [search, setSearch] = useState('');
+  const [showDepartments, setShowDepartments] = useState(false);
+
+  // MCC itself should always be visible even when departments are hidden
+  const isMccOrg = (name: string) => {
+    const n = name.toLowerCase();
+    return n === 'mcc' || n.includes('multicultural center');
+  };
+
+  const filteredClubs = clubs.filter(club => {
+    if (club.orgType === 'department' && !showDepartments && !isMccOrg(club.name)) return false;
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      return club.name.toLowerCase().includes(q) || (club.description ?? '').toLowerCase().includes(q);
+    }
+    return true;
+  });
+
   const canAddClub = currentUser?.role === 'admin';
 
   const handleAddClub = (e: React.FormEvent<HTMLFormElement>) => {
@@ -157,9 +175,9 @@ export function ClubRoster() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-2xl mb-1">Club Roster</h2>
+          <h2 className="text-2xl mb-1">Organization Roster</h2>
           <p className="text-muted-foreground">
             Explore all student organizations in the Multicultural Center
           </p>
@@ -178,8 +196,35 @@ export function ClubRoster() {
         </div>
       </div>
 
+      {/* Search + filter bar */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            placeholder="Search organizations…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Button
+          variant={showDepartments ? 'default' : 'outline'}
+          onClick={() => setShowDepartments(v => !v)}
+          className="shrink-0"
+        >
+          <Building2 className="h-4 w-4 mr-2" />
+          {showDepartments ? 'Departments: On' : 'Departments: Off'}
+        </Button>
+      </div>
+
+      {filteredClubs.length === 0 && (
+        <p className="text-center text-muted-foreground py-12">
+          No organizations match your search.
+        </p>
+      )}
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {clubs.map((club) => (
+        {filteredClubs.map((club) => (
           <Card
             key={club.id}
             className="cursor-pointer hover:shadow-lg transition-shadow"
@@ -337,7 +382,7 @@ export function ClubRoster() {
                 id="color" 
                 name="color" 
                 type="color" 
-                defaultValue="#4ECDC4"
+                defaultValue="#7D9E8E"
               />
             </div>
             <div className="border-t pt-4">

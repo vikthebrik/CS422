@@ -26,7 +26,7 @@ import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';
 import { useState } from 'react';
 import { LoginDialog } from './LoginDialog';
-import { ThemeToggle } from './ThemeToggle';
+import { ThemePicker } from './ThemePicker';
 import { toast } from 'sonner';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
@@ -66,7 +66,7 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
               to="/"
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"
             >
-              <img src="/assets/Waving.png" alt="MCC Logo" className="h-9 w-9 object-contain" />
+              <img src="/assets/Walking.png" alt="MCC Logo" className="h-9 w-9 object-contain" />
               <div>
                 <h1 className="text-lg sm:text-xl">MCC Calendar Hub</h1>
                 <p className="text-xs text-muted-foreground hidden sm:block">
@@ -76,7 +76,7 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
             </Link>
           </div>
           <div className="flex items-center gap-2">
-            <ThemeToggle />
+            <ThemePicker />
             {currentUser && (
               <div className="hidden sm:flex items-center gap-2 mr-2">
                 {userClub ? (

@@ -34,11 +34,21 @@
 import { useState, useEffect } from 'react';
 import { Club } from '../types';
 
-// Deterministic color palette for clubs (cycles if more clubs than colors)
+// Deterministic color palette for clubs — muted, analog pastels
+// Each is distinct enough to tell apart while staying calm on the page.
 const CLUB_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#95E1D3', '#F3A683',
-  '#786FA6', '#F8B500', '#6C5CE7', '#00B894',
-  '#E17055', '#0984E3', '#FDCB6E', '#00CEC9',
+  '#7D9E8E', // sage
+  '#8DA3BC', // dusty blue
+  '#BC9870', // warm amber
+  '#A87D9E', // dusty plum
+  '#7D9EA8', // slate
+  '#BC7D7D', // dusty rose
+  '#9EBC8D', // soft moss
+  '#BC9D7D', // tan
+  '#7D8DAA', // periwinkle
+  '#A89B7D', // khaki
+  '#BC8D9E', // mauve
+  '#7DAA9E', // teal
 ];
 
 function getClubColor(index: number): string {
