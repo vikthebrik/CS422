@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { toast } from 'sonner';
 import { useApp } from '../context/AppContext';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function ChangePassword() {
   const { authToken, currentUser } = useApp();

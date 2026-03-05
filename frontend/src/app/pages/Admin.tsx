@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Pencil, Trash2, Search, Settings, Calendar, MapPin, Clock, Instagram, Link as LinkIcon, Globe, Plus, X, Ticket, AlertTriangle } from 'lucide-react';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/table';

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../co
 import { Button } from '../components/ui/button';
 import { CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function ConfirmEmail() {
   const [params] = useSearchParams();

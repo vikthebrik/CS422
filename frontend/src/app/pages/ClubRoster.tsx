@@ -13,7 +13,7 @@ import { Checkbox } from '../components/ui/checkbox';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 type Section = 'exec' | 'board' | 'intern';
 const SECTION_LABELS: Record<Section, string> = { exec: 'Executive Team', board: 'Board', intern: 'Interns' };

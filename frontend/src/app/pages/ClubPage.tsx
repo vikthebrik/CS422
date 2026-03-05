@@ -19,7 +19,7 @@ import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { Event } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function ClubPage() {
   const { clubId } = useParams();

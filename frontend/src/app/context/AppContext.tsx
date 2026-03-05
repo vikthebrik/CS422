@@ -3,7 +3,7 @@ import { Event, Club, User } from '../types';
 import { useClubs } from '../hooks/useClubs';
 import { useEvents } from '../hooks/useEvents';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 const TOKEN_KEY = 'mcc_auth_token';
 
 interface AppContextType {

@@ -16,7 +16,7 @@ import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../components/ui/dialog';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 const SETTINGS_KEY = 'about-page';
 
 const DEFAULT_BLOCKS: Block[] = [

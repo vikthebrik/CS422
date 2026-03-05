@@ -5,7 +5,7 @@ import { Button } from './ui/button';
 import { toast } from 'sonner';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 const MAX_SIZE_MB = 5;
 
 /**
