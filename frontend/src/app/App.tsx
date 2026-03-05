@@ -45,11 +45,14 @@ import { ResetPassword } from './pages/ResetPassword';
 import { RequestAccount } from './pages/RequestAccount';
 import { ChangePassword } from './pages/ChangePassword';
 import { ConfirmEmail } from './pages/ConfirmEmail';
+import { NotFound } from './pages/NotFound';
+import { RouteError } from './pages/RouteError';
 
 const router = createBrowserRouter([
   {
     path: "/",
     Component: Layout,
+    errorElement: <RouteError />,
     children: [
       // Public routes
       { index: true, Component: Dashboard },
@@ -78,6 +81,9 @@ const router = createBrowserRouter([
           { path: "club-management", Component: ClubManagement },
         ],
       },
+
+      // Catch-all 404
+      { path: "*", Component: NotFound },
     ],
   },
 ]);
