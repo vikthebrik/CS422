@@ -312,9 +312,11 @@ app.post('/auth/forgot-password', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'email is required' });
 
-  // Always return 200 to avoid leaking whether an email exists
-  await sendPasswordReset(email.trim().toLowerCase());
+  // Respond immediately — never leak whether the email exists, and don't block on SMTP.
   res.json({ status: 'ok' });
+  sendPasswordReset(email.trim().toLowerCase()).catch(err =>
+    log.error(`sendPasswordReset failed for ${email}: ${err.message}`)
+  );
 });
 
 // POST /auth/reset-password  { token, tokenType, newPassword }
@@ -1492,8 +1494,10 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
 
     clearCacheKey('clubs:all');
 
-    // 5. Send a Supabase password-set email (best-effort)
-    await sendPasswordReset(email);
+    // 5. Send password-set email (best-effort, fire-and-forget)
+    sendPasswordReset(email).catch(err =>
+      log.error(`sendPasswordReset failed for ${email}: ${err.message}`)
+    );
 
     res.json({ clubId: (club as any).id, clubName: (club as any).name, email });
   } catch (err: any) {
