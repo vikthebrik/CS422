@@ -42,6 +42,7 @@ export interface Event {
   requiresRsvp?: boolean;
   rsvpLink?: string | null;
   rsvpNote?: string | null;
+  manuallyEdited?: boolean;
   collaborators?: CollaboratorInfo[];
 }
 

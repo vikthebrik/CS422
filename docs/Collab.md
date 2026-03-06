@@ -21,12 +21,15 @@ Club officers see events their club has been invited to co-host via Outlook Cale
 |---------|-------------|
 | Stats | Total / pending / unique active partnerships |
 | Pending Invites | Accept / reject buttons → PATCH /collab/:id { status } |
-| Declined Invites | Re-accept option |
-| Upcoming Collaborative Events | Accepted collabs with navigate-to-event links |
+| Declined Invites | Re-accept option; "Clear History" bulk-delete button |
+| Upcoming Collaborative Events | Accepted collabs with future start_time; navigate-to-event links |
+| Past Collaborative Events | Accepted collabs with past start_time; dimmed, no decline button |
 
 ## Auth
 
 Protected by [[ProtectedRoute]] (any authenticated user). Backend scopes results by `club_id` from JWT.
+
+Root admins without a `clubId` (site-wide admins) see a placeholder message directing them to manage collaborators from individual event pages instead.
 
 ## Key API Calls
 
@@ -34,6 +37,9 @@ Protected by [[ProtectedRoute]] (any authenticated user). Backend scopes results
 |--------|----------|
 | Fetch collabs | GET /collab (requireAuth) |
 | Accept/reject | PATCH /collab/:id { status } |
+| Delete declined | DELETE /collab/:id (requireAuth) |
+
+Note: `PATCH /collab/:id` uses `ignoreDuplicates: true` in the underlying upsert, so ICS syncs cannot overwrite a status that a user has explicitly set.
 
 ## Reads from [[AppContext]]
 `clubs`, `currentUser`, `authToken`

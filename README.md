@@ -4,34 +4,49 @@ Web-based calendar hub that aggregates Multicultural Center (MCC) student organi
 
 ## Monorepo Layout
 
-- **`frontend/`** — React SPA (Vite + Tailwind). Deploy to Vercel.
-- **`server/`** — Express API (events, subscriptions, admin sync worker). Deploy to Render.
+| Directory | Purpose |
+|-----------|---------|
+| `frontend/` | Vite + React 18 + TypeScript SPA. Deploy to Vercel. |
+| `server/` | Express REST API + ICS sync cron. Deploy to Render. |
+| `docs/` | Component and feature reference (Obsidian-style wiki). |
+| `plans/` | Operational guides (deployment, club admin how-to, email config). |
 
 ## Quick Start (Local Development)
 
 ### 1. Database Setup
-Ensure you have a local or hosted Supabase PostgreSQL instance running. Ensure migrations `001_schema_upgrade.sql` through `005_enable_auth.sql` (found in `server/src/db/migrations/`) have been executed in your SQL editor.
 
-### 2. Run the Backend API
+Run all migrations in order against your Supabase project (`server/src/db/migrations/001_schema_upgrade.sql` → `014_club_members.sql`).
+
+### 2. Environment Variables
+
+Copy the example files and fill in your values:
 ```bash
-cd server
-npm install
-npm run dev
+cp server/.env.example server/.env
+cp frontend/.env.example frontend/.env
 ```
-*(Requires `SUPABASE_URL`, `SUPABASE_KEY`, `SYNC_SECRET`, and `ALLOWED_ORIGINS` in `server/.env`)*
 
-### 3. Run the Frontend UI
-**Open a second terminal:**
+Key variables:
+- `server/.env`: `SUPABASE_URL`, `SUPABASE_KEY` (service role), `SYNC_SECRET`, `ALLOWED_ORIGINS`, `RESEND_API_KEY`, `SMTP_FROM`
+- `frontend/.env`: `VITE_API_BASE_URL=http://localhost:4000`
+
+### 3. Run the Backend
 ```bash
-cd frontend
-npm install
-npm run dev
+cd server && npm install && npm run dev
 ```
-*(Requires `VITE_API_BASE_URL=http://localhost:4000` in `frontend/.env`)*
+API runs on `http://localhost:4000`.
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+### 4. Run the Frontend
+```bash
+cd frontend && pnpm install && pnpm dev
+```
+App runs on `http://localhost:5173`.
 
 ## Documentation
 
-- **Development Guide**: See [`CLAUDE.md`](CLAUDE.md) for full architecture details, database schema, authentication flows, and automated sync script instructions. 
-- **Deployment Guide**: See [`plans/deployment-guide.md`](plans/deployment-guide.md) for step-by-step instructions on deploying the full stack to Render, Vercel, and GitHub Actions.
+| File | Contents |
+|------|----------|
+| [`CLAUDE.md`](CLAUDE.md) | Full architecture, all API endpoints, auth flow, data mapping — primary dev reference |
+| [`docs/index.md`](docs/index.md) | Component and feature wiki index |
+| [`plans/deployment-guide.md`](plans/deployment-guide.md) | Render + Vercel + Supabase deployment steps |
+| [`plans/club-admin-guide.md`](plans/club-admin-guide.md) | End-user guide for club officers |
+| [`server/DB_MANUAL.md`](server/DB_MANUAL.md) | Database schema reference |

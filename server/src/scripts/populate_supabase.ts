@@ -89,10 +89,11 @@ export async function populate(clubName: string, icsUrl: string) {
                 const attClubId = emailToClubId[att.email];
                 if (!attClubId || attClubId === club.id) continue;
                 const status = att.partstat === 'ACCEPTED' ? 'accepted' : 'pending';
+                // ignoreDuplicates: true — never overwrite a status the club admin has manually set
                 const { error: ce } = await supabase
                     .from('collaborations')
                     .upsert({ event_id: eventId, club_id: attClubId, role: 'secondary', status },
-                        { onConflict: 'event_id,club_id' });
+                        { onConflict: 'event_id,club_id', ignoreDuplicates: true });
                 if (ce) console.error(`Failed to upsert attendee collab:`, ce);
                 else collabCount++;
             }
@@ -222,37 +223,37 @@ export async function populate(clubName: string, icsUrl: string) {
                         // Event exists!
                         if (existingEvent.club_id === club.id) {
                             // It belongs to THIS club (Primary). Update it.
-                            // If an admin has manually edited this event, preserve their
-                            // changes to content fields — only refresh timing + RSVP info.
-                            const syncPayload: Record<string, any> = {
-                                start_time: new Date(start).toISOString(),
-                                end_time: new Date(end).toISOString(),
-                                last_updated: new Date().toISOString(),
-                                requires_rsvp: rsvpInfo.required,
-                                rsvp_link: rsvpInfo.link,
-                            };
-                            if (!existingEvent.manually_edited) {
-                                syncPayload.title = title;
-                                syncPayload.description = description;
-                                syncPayload.location = location;
-                                syncPayload.type_id = typeId;
+                            // If an admin has manually edited this event, all fields are frozen —
+                            // only last_updated is refreshed so we know the sync ran.
+                            if (existingEvent.manually_edited) {
+                                await supabase
+                                    .from('events')
+                                    .update({ last_updated: new Date().toISOString() })
+                                    .eq('id', existingEvent.id);
+                            } else {
+                                const syncPayload: Record<string, any> = {
+                                    title,
+                                    description,
+                                    location,
+                                    type_id: typeId,
+                                    start_time: new Date(start).toISOString(),
+                                    end_time: new Date(end).toISOString(),
+                                    last_updated: new Date().toISOString(),
+                                    requires_rsvp: rsvpInfo.required,
+                                    rsvp_link: rsvpInfo.link,
+                                };
+                                const { error: updateError } = await supabase
+                                    .from('events')
+                                    .update(syncPayload)
+                                    .eq('id', existingEvent.id);
+                                if (updateError) console.error(`Failed to update event ${uid}:`, updateError);
                             }
-                            const { error: updateError } = await supabase
-                                .from('events')
-                                .update(syncPayload)
-                                .eq('id', existingEvent.id);
-
-                            if (updateError) console.error(`Failed to update event ${uid}:`, updateError);
-                            else {
-                                processedCount++;
-                                // Also process attendees so invitees get collaboration records
-                                await upsertAttendeeCollabs(existingEvent.id, attendees);
-                            }
+                            processedCount++;
+                            await upsertAttendeeCollabs(existingEvent.id, attendees);
 
                         } else {
                             // It belongs to ANOTHER club. This is a COLLABORATION.
-                            // The first club to sync this UID became the Primary.
-                            // Determine status: check if THIS club appears as an accepted attendee.
+                            // ignoreDuplicates: true — never flip a status the club admin has set.
                             const myEmails = clubIdToEmails[club.id] ?? [];
                             const myAttendee = attendees.find(a => myEmails.includes(a.email));
                             const status = myAttendee?.partstat === 'ACCEPTED' ? 'accepted' : 'pending';
@@ -264,7 +265,7 @@ export async function populate(clubName: string, icsUrl: string) {
                                     club_id: club.id,
                                     role: 'secondary',
                                     status,
-                                }, { onConflict: 'event_id,club_id' });
+                                }, { onConflict: 'event_id,club_id', ignoreDuplicates: true });
 
                             if (collabError) console.error(`Failed to add collaboration for ${uid}:`, collabError);
                             else collabCount++;

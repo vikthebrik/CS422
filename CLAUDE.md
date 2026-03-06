@@ -31,9 +31,10 @@ cd server && npm run dev
 # Frontend
 cd frontend && pnpm dev
 ```
-- `server/.env` needs: `SUPABASE_URL`, `SUPABASE_KEY` (service role), `SYNC_SECRET`, `ALLOWED_ORIGINS`, `PORT`, `CACHE_TTL_SECONDS`, `FRONTEND_URL`, `SYNC_CRON_SCHEDULE`
+- `server/.env` needs: `SUPABASE_URL`, `SUPABASE_KEY` (service role), `SYNC_SECRET`, `ALLOWED_ORIGINS`, `PORT`, `CACHE_TTL_SECONDS`, `FRONTEND_URL`, `SYNC_CRON_SCHEDULE`, `RESEND_API_KEY`, `SMTP_FROM`
 - `frontend/.env` needs: `VITE_API_BASE_URL=http://localhost:4000`
 - See `server/.env.example` and `frontend/.env.example`
+- **Note:** `SMTP_HOST/PORT/USER/PASS` are no longer used — email is sent via Resend SDK
 
 ## Key Files
 | File | Purpose |
@@ -120,52 +121,22 @@ DB clubs have no color field. Colors are assigned deterministically by array ind
 ## Org Type (Department vs Union)
 `clubs.org_type` column (migration 007): `'union'` (default) | `'department'`. Both map to `club_admin` role — same permission scope (own org only). The root admin is the only superuser. Frontend maps to `Club.orgType` and displays a "Department" / "Union" badge on ClubPage and ClubRoster.
 
-## Current State (last updated 2026-03-04)
-- Backend API is fully functional: caching, ICS generation, auth, mutations, cache-clear endpoint.
-- Frontend is fully wired to the backend — no mock data for clubs or events.
-- Auth flow (login, persist, sign-out, role-gating) is integrated.
-- Club edit modal (PATCH /clubs/:id) is integrated on ClubPage.
-- Upcoming events on ClubPage now display date + time (fixed 2026-02-25).
-- Full auth suite implemented: forgot-password, reset-password, request-account flows.
-- PasswordManagement.tsx now fetches real users from /admin/users and resets via API.
-- Event Types CRUD section (root admin only) is in ClubManagement.tsx (migrated from Admin.tsx).
-- LoginDialog.tsx has email validation + "Forgot Password" / "Request Account" links.
-- Routes added: /forgot-password, /reset-password, /request-account.
-- seed_auth.ts rewritten to use supabase.auth.admin.createUser (no more bcrypt/users table).
-- org_type column added to clubs (migration 007) with Department/Union badge in UI.
-- ICS sync cron runs in-process via node-cron (`server/src/cron.ts`), default every 14 min (`*/14 * * * *`), configurable via `SYNC_CRON_SCHEDULE`.
-- `events.manually_edited` (bool, default false): set to `true` by `PATCH /events/:id`. Sync skips overwriting `title`, `description`, `location`, `type_id` for flagged events — only `start_time`, `end_time`, `requires_rsvp`, `rsvp_link` are refreshed.
-- `events.rsvp_note` (text, nullable): free-text note shown to attendees on events requiring RSVP. **Requires DB migration**: `ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_note text;`
-- `eventTypeNames` added to AppContext (fetched from `/event-types`); `selectedEventTypes` initialized to all types on load.
-- FilterSidebar uses live `eventTypeNames` from context (not hardcoded `EVENT_TYPES`).
-- Admin edit modal uses controlled `editingEventType` state for the event type Select (fixes FormData not capturing Radix Select value).
-- Collaborations are fully integrated: `GET /collab` (requireAuth) returns all collaborations for the user's club; `PATCH /collab/:id { status }` accepts or rejects; `GET /events` only returns accepted collaborations in the `collaborators` array (with `club_id`, `club_name`, `club_logo`). `Collab.tsx` is rewritten to fetch from the real API — no more mock data.
-- Manual collaborator management: `POST /events/:id/collaborators { clubId }` and `DELETE /events/:id/collaborators/:clubId` (requireAuth, scoped by role). EventPage edit modal shows a "Collaborating Clubs" section (add/remove clubs) visible to any user who can edit the event.
-- ICS sync (cron + `populate_supabase.ts`) now looks up clubs by `ics_source_url` instead of upserting by `name`. If no club with that ICS URL exists (e.g., deleted by admin), the sync silently skips it — admin-made renames and deletions are now permanent.
-- Email change: `POST /auth/change-email { newEmail }` — requireAuth — sends HMAC-signed confirmation link (24h) to new email via nodemailer; `POST /auth/confirm-email { token }` — public — validates token, updates Supabase auth email + `user_roles.email`; `PATCH /admin/users/:userId/email { newEmail }` — requireRoot — immediate update. Frontend: `ChangePassword.tsx` has a "Change Email" section for club admins; `ConfirmEmail.tsx` page at `/confirm-email` handles the confirmation link; `ClubManagement.tsx` has a mail icon per club row that opens an email-change dialog (root admin, immediate).
-- `/about` page is implemented with a block-based CMS: TextBlock, MediaBlock, LinkContainerBlock, ClubShowcaseBlock. Root admin can edit/reorder/add/delete blocks inline. Content stored in `site_settings` table (key=`about-page`, value=jsonb Block[]). Requires DB migration `011_site_settings.sql`. Media uploads go to `mcc-public-assets` Supabase Storage bucket via `POST /site-settings/upload`.
-- `/admin` route removed (Event Management page fully deprecated). `Admin.tsx` file remains but is no longer routed.
-- ICS subscription feature (`SubscriptionLinkGenerator.tsx`) shows an "under construction / coming soon" placeholder — all functional code stripped.
-- FilterSidebar: scrollable (overflow-y-auto), search bar added, Advanced Mode toggle (Zap icon) enables per-club event type filtering stored in `perClubEventTypes` in AppContext.
-- Dashboard: applies `searchQuery`, `advancedMode`/`perClubEventTypes` filter logic.
-- ClubPage: local search + event-type dropdown filter; past events toggle; ICS URL field in edit modal; edit modal now calls API (PATCH /clubs/:id).
-- Admin.tsx club edit modal also includes ICS URL field.
-- Logout now navigates to `/` (NavigationBar.tsx).
-- PATCH /clubs/:id now accepts `outlookLink` → saves to `ics_source_url`.
-- `user_roles.raw_password` column (migration 010): seed + password reset both write the plaintext password; GET /admin/users returns it; PasswordManagement shows it on load.
-- Login redirects to `/admin` after success (LoginDialog.tsx).
-- Sidebar is now a single `overflow-y-auto` container (no inner split) so all content scrolls together.
-- "Admin" tab removed from nav; replaced with "Clubs" tab (root admin only) at `/club-management`.
-- ClubManagement.tsx: add clubs (POST /clubs) + delete clubs (DELETE /clubs/:id, cascades events + user_roles).
-- Logo uploads: `POST /clubs/:id/logo` accepts base64 data URL, uploads to Supabase Storage bucket `club-logos` (auto-created), updates logo_url. Root admin: any club; club_admin: own club only. LogoUpload.tsx shared component used in ClubPage, Admin, and ClubManagement.
-- Express body limit raised to 8mb for logo payloads.
-- RSVP toggle added to all event edit/create modals — standalone switch independent of link. RSVP Note text field shown when toggle is ON. Inline amber warning if toggle ON but no link provided. Backend PATCH/POST accept `requiresRsvp` (bool) and `rsvpNote` (text) fields.
-- Login redirect changed from `/admin` to `/club-management` for MCC admin users.
-- Club names on Club Management page are clickable links navigating to `/club/:id`.
-- "Add Event" button added to Club Management page header (opens full create event modal). "Add Event" button also added to root admin Event Management page header.
-- `EventDetailModal` shows RSVP note, RSVP badge without link (graceful fallback), RSVP link button when available.
-- "Our Team" section on each ClubPage: `club_members` table (migration 014) with `section` (exec/board/intern), `name`, `title`, `email`, `photo_url`, `sort_order`. Public `GET /clubs/:id/members`; auth-gated POST/PATCH/DELETE/photo-upload. `OurTeam.tsx` component handles all CRUD inline with dialogs. Email is clickable to copy. Photos uploaded to `member-photos` Supabase bucket (max 300px, WebP). Editable by root and own club_admin. **Requires running migration 014_club_members.sql in Supabase.**
-- Account approval emails: `POST /admin/requests/:id/approve` now sends the club admin's login credentials to their contact email via SMTP (nodemailer). Gracefully skips if SMTP_HOST env var is not set. New env vars: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`.
-- Change password: `POST /auth/change-password { currentPassword, newPassword }` (requires auth). Verifies current password via sign-in, updates via admin API, updates `user_roles.raw_password`. Auth middleware now exposes `req.userEmail`.
-- `ChangePassword.tsx` page at `/change-password` (any authenticated user). Accessible via the key icon in NavigationBar (visible to all logged-in users).
-- Password reset flow (forgot-password) works for both hash-based tokens (implicit flow) and query param token_hash (PKCE flow).
+## Current State (last updated 2026-03-06)
+- Full-stack production app. No mock data. All features wired to backend API + Supabase.
+- **Email:** Resend SDK (HTTP/443) — not nodemailer. Render blocks SMTP ports. Env: `RESEND_API_KEY`, `SMTP_FROM`. Used for password reset, account approval, email-change confirmation.
+- **Password reset:** Supabase PKCE bypass — `admin.generateLink()` produces `hashed_token`; sent as `?token_hash=HASH&type=recovery` in branded email. Frontend reads `token_hash` param; backend validates via `supabase.auth.verifyOtp()`.
+- **`events.manually_edited`** (bool, migration 009): set `true` when content fields edited (title/description/location/type). When `true`, ICS sync freezes the **entire** event — only `last_updated` refreshed. RSVP-only changes do NOT set the flag. EventPage shows amber banner to editors + "Resume Auto-Sync" button (`PATCH /events/:id { resumeSync: true }` → sets flag `false`).
+- **Collab page:** Pending / Declined / Upcoming / Past sections. Root admin without clubId sees redirect message. `ignoreDuplicates: true` on collab upserts → ICS sync cannot overwrite user-set accept/reject status.
+- **Server dashboard:** `GET /` HTML + `GET /status` JSON (public); `POST /admin/sync` (x-sync-secret gated). Exposes sync history, log ring buffer, cache keys.
+- **ICS sync:** Cron every 14 min (configurable via `SYNC_CRON_SCHEDULE`). Clubs looked up by `ics_source_url` — admin deletions permanent. Collaboration records created from Outlook attendee PARTSTAT.
+- **RSVP:** Toggle + link + note on all event edit/create modals. `rsvp_note` column: migration 013. `EventDetailModal` gracefully degrades when link is missing.
+- **Collab API:** `GET /collab` (requireAuth), `PATCH /collab/:id { status }`, `DELETE /collab/:id`. Manual collabs: `POST /events/:id/collaborators { clubId }`, `DELETE /events/:id/collaborators/:clubId`.
+- **About CMS:** Block-based (TextBlock/MediaBlock/LinkContainerBlock/ClubShowcaseBlock). `site_settings` table key=`about-page`. Root admin edits inline. Media → `mcc-public-assets` bucket.
+- **FilterSidebar:** Scrollable, search bar, Advanced Mode (per-club event type filtering via `perClubEventTypes` in AppContext).
+- **ClubManagement (root):** Add/delete clubs, CRUD event types, approve requests (sends credentials via Resend), force-set club email (immediate), view raw passwords.
+- **Our Team:** `club_members` table (migration 014). Full CRUD in `OurTeam.tsx`. Photos → `member-photos` bucket (max 300px WebP).
+- **Auth pages:** `/forgot-password`, `/reset-password`, `/request-account`, `/change-password`, `/confirm-email`.
+- **Logos:** `POST /clubs/:id/logo` → `club-logos` bucket (base64 dataURL, 8mb Express limit).
+- **org_type** (migration 007): `union` | `department`. Badge shown on ClubPage + ClubRoster.
+- **`user_roles.raw_password`** (migration 010): written on seed + password reset; visible in ClubManagement.
+- ICS subscription (`SubscriptionLinkGenerator.tsx`) shows "coming soon" placeholder.

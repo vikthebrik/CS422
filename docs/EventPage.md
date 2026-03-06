@@ -10,6 +10,7 @@ Full event detail page. Linked from [[EventDetailModal]] and [[CalendarGrid]].
 ## Sections
 
 - Event metadata: title, type badge, club badge, date/time, location + map link
+- **Auto-sync paused banner** (amber, visible to editors only when `event.manuallyEdited === true`): explains that Outlook sync is frozen and provides a "Resume Auto-Sync" button
 - Description
 - [[RSVP System]] section (if `requiresRsvp`)
 - Collaborating Clubs (visible to editors): add/remove clubs
@@ -25,11 +26,16 @@ Full event detail page. Linked from [[EventDetailModal]] and [[CalendarGrid]].
 
 ## Key API Calls
 
-| Action              | Endpoint                            | Context mutation   |
-|---------------------|-------------------------------------|--------------------|
-| Edit event          | PATCH /events/:id                   | `updateEvent()`    |
-| Add collaborator    | POST /events/:id/collaborators      | `updateEvent()`    |
-| Remove collaborator | DELETE /events/:id/collaborators/:cid | `updateEvent()`  |
+| Action              | Endpoint                              | Context mutation   |
+|---------------------|---------------------------------------|--------------------|
+| Edit event          | PATCH /events/:id                     | `updateEvent()`    |
+| Resume auto-sync    | PATCH /events/:id `{ resumeSync: true }` | `updateEvent({ manuallyEdited: false })` |
+| Add collaborator    | POST /events/:id/collaborators        | `updateEvent()`    |
+| Remove collaborator | DELETE /events/:id/collaborators/:cid | `updateEvent()`    |
+
+### Auto-Sync Pause Banner
+
+When a club officer or admin edits content fields (title, description, location, event type), the backend sets `manually_edited = true`. On the next page load the amber banner appears. "Resume Auto-Sync" sends `{ resumeSync: true }` which clears the flag, allowing the ICS cron to overwrite the event again on the next sync.
 
 ## Reads from [[AppContext]]
 `events`, `clubs`, `currentUser`, `authToken`, `updateEvent`, `eventTypeNames`

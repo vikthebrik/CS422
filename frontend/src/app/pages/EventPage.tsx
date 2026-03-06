@@ -24,7 +24,7 @@
  * | Remove collaborator | DELETE /events/:id/collaborators/:cid | updateEvent() |
  */
 import { useParams, useNavigate } from 'react-router';
-import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -36,9 +36,12 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useState } from 'react';
+import { Switch } from '../components/ui/switch';
 import { toast } from 'sonner';
 import { EVENT_TYPES, CollaboratorInfo } from '../types';
 import { getLocationUrl } from '../constants';
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function EventPage() {
   const { eventId } = useParams();
@@ -48,6 +51,12 @@ export function EventPage() {
   const [localCollabs, setLocalCollabs] = useState<CollaboratorInfo[]>([]);
   const [addClubId, setAddClubId] = useState<string>('');
   const [collabLoading, setCollabLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editingEventType, setEditingEventType] = useState('');
+  const [editingRequiresRsvp, setEditingRequiresRsvp] = useState(false);
+  const [editingRsvpLink, setEditingRsvpLink] = useState('');
+  const [editingRsvpNote, setEditingRsvpNote] = useState('');
+  const [resumingSyncId, setResumingSyncId] = useState<string | null>(null);
 
   const event = events.find(e => e.id === eventId);
   const club = event ? clubs.find(c => c.id === event.clubId) : null;
@@ -66,7 +75,30 @@ export function EventPage() {
   const openEditModal = () => {
     setLocalCollabs(event?.collaborators ?? []);
     setAddClubId('');
+    setEditingEventType(event.eventType);
+    setEditingRequiresRsvp(event.requiresRsvp ?? false);
+    setEditingRsvpLink(event.rsvpLink ?? '');
+    setEditingRsvpNote(event.rsvpNote ?? '');
     setIsEditModalOpen(true);
+  };
+
+  const handleResumeSync = async () => {
+    if (!event) return;
+    setResumingSyncId(event.id);
+    try {
+      const res = await fetch(`${API_BASE}/events/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ resumeSync: true }),
+      });
+      if (!res.ok) throw new Error('Failed to resume sync');
+      updateEvent(event.id, { manuallyEdited: false });
+      toast.success('Auto-sync resumed — this event will update from Outlook again');
+    } catch {
+      toast.error('Could not resume auto-sync');
+    } finally {
+      setResumingSyncId(null);
+    }
   };
 
   const handleAddCollaborator = async () => {
@@ -116,20 +148,45 @@ export function EventPage() {
     }
   };
 
-  const handleSaveEvent = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveEvent = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
-    const eventData = {
+    const body = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       location: formData.get('location') as string,
-      eventType: formData.get('eventType') as string,
+      eventType: editingEventType,
+      requiresRsvp: editingRequiresRsvp,
+      rsvpLink: editingRsvpLink.trim() || null,
+      rsvpNote: editingRsvpNote.trim() || null,
     };
 
-    updateEvent(event.id, eventData);
-    toast.success('Event updated successfully');
-    setIsEditModalOpen(false);
+    setEditSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/events/${event.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to save event'); return; }
+      const contentChanged = body.title !== event.title || body.description !== event.description || body.location !== event.location || body.eventType !== event.eventType;
+      updateEvent(event.id, {
+        ...body,
+        eventType: body.eventType,
+        requiresRsvp: body.requiresRsvp,
+        rsvpLink: body.rsvpLink ?? undefined,
+        rsvpNote: body.rsvpNote ?? undefined,
+        manuallyEdited: contentChanged ? true : event.manuallyEdited,
+      });
+      toast.success('Event updated');
+      setIsEditModalOpen(false);
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   const duration = (event.endTime.getTime() - event.startTime.getTime()) / (1000 * 60 * 60);
@@ -168,6 +225,32 @@ export function EventPage() {
           </div>
         </CardHeader>
       </Card>
+
+      {/* Manually Edited Banner */}
+      {event.manuallyEdited && canEdit && (
+        <div className="flex items-start justify-between gap-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 px-4 py-3">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Auto-sync paused for this event</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                You manually edited this event. Future Outlook calendar syncs will not overwrite your changes.
+                Resume auto-sync if you want the calendar to manage this event again.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 border-amber-400 text-amber-700 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-900/40"
+            disabled={resumingSyncId === event.id}
+            onClick={handleResumeSync}
+          >
+            <RefreshCw className="h-4 w-4 mr-1" />
+            {resumingSyncId === event.id ? 'Resuming…' : 'Resume Auto-Sync'}
+          </Button>
+        </div>
+      )}
 
       {/* Event Details Grid */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -339,7 +422,7 @@ export function EventPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="eventType">Event Type</Label>
-                <Select name="eventType" defaultValue={event.eventType}>
+                <Select value={editingEventType} onValueChange={setEditingEventType}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -357,6 +440,43 @@ export function EventPage() {
                 <Input id="location" name="location" defaultValue={event.location} required />
               </div>
             </div>
+
+            {/* RSVP */}
+            <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
+              <div>
+                <Label className="text-sm font-medium">RSVP Required</Label>
+                <p className="text-xs text-muted-foreground">Toggle if attendees must RSVP for this event</p>
+              </div>
+              <Switch checked={editingRequiresRsvp} onCheckedChange={setEditingRequiresRsvp} />
+            </div>
+            {editingRequiresRsvp && (
+              <>
+                <div>
+                  <Label htmlFor="rsvpLink">RSVP / Ticket Link</Label>
+                  <Input
+                    id="rsvpLink"
+                    value={editingRsvpLink}
+                    onChange={e => setEditingRsvpLink(e.target.value)}
+                    placeholder="https://..."
+                  />
+                  {editingRequiresRsvp && !editingRsvpLink.trim() && (
+                    <p className="text-xs text-amber-500 flex items-center gap-1 mt-1">
+                      <AlertCircle className="h-3 w-3" /> No link provided — attendees will see RSVP is required but have no link to follow.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <Label htmlFor="rsvpNote">RSVP Note</Label>
+                  <Textarea
+                    id="rsvpNote"
+                    value={editingRsvpNote}
+                    onChange={e => setEditingRsvpNote(e.target.value)}
+                    placeholder="e.g. Please RSVP by Friday noon. Limited seating available."
+                    rows={2}
+                  />
+                </div>
+              </>
+            )}
             {/* Collaborators */}
             <div>
               <Label>Collaborating Clubs</Label>
@@ -413,11 +533,11 @@ export function EventPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)} disabled={editSaving}>
                 Cancel
               </Button>
-              <Button type="submit" className="bg-primary">
-                Save Changes
+              <Button type="submit" className="bg-primary" disabled={editSaving}>
+                {editSaving ? 'Saving…' : 'Save Changes'}
               </Button>
             </div>
           </form>

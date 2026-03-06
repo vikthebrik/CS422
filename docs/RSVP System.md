@@ -33,8 +33,9 @@ RSVP controls appear in all event edit/create modals:
 ## Backend
 
 - `PATCH /events/:id` and `POST /events` both accept `requiresRsvp` (bool) and `rsvpNote` (text)
-- `rsvp_note` column requires DB migration: `ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_note text;`
-- Sync only refreshes `requires_rsvp` and `rsvp_link` (not title/description/type) — preserves manual edits
+- `rsvp_note` column: migration `013_rsvp_note.sql`
+- RSVP-only changes (`requiresRsvp`, `rsvpLink`, `rsvpNote`) do **not** set `manually_edited = true` — so toggling RSVP does not freeze the event from future ICS syncs
+- If `manually_edited = true`, sync freezes the entire event (including RSVP fields). Resume auto-sync via `{ resumeSync: true }` to unfreeze
 
 ## Related
 - [[EventDetailModal]] — RSVP display

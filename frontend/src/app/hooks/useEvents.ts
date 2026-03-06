@@ -50,6 +50,7 @@ interface ApiEvent {
   requires_rsvp: boolean | null;
   rsvp_link: string | null;
   rsvp_note?: string | null;
+  manually_edited?: boolean | null;
 }
 
 function mapApiEvent(
@@ -69,6 +70,7 @@ function mapApiEvent(
     requiresRsvp: apiEvent.requires_rsvp ?? false,
     rsvpLink: apiEvent.rsvp_link ?? null,
     rsvpNote: apiEvent.rsvp_note ?? null,
+    manuallyEdited: apiEvent.manually_edited ?? false,
     collaborators: apiEvent.collaborators ?? [],
   };
 }

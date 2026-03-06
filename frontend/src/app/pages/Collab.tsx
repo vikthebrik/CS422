@@ -107,18 +107,30 @@ export function Collab() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       toast.success(status === 'accepted' ? 'Collaboration accepted!' : 'Collaboration declined');
       await fetchCollabs();
-      setTimeout(() => window.location.reload(), 1500);
     } catch (err: any) {
       toast.error('Failed to update collaboration');
     }
   };
 
+  const now = new Date();
   const pending = collabs.filter(c => c.status === 'pending');
   const accepted = collabs.filter(c => c.status === 'accepted');
+  const upcomingAccepted = accepted.filter(c => c.events?.start_time && new Date(c.events.start_time) >= now);
+  const pastAccepted = accepted.filter(c => c.events?.start_time && new Date(c.events.start_time) < now);
   const rejected = collabs.filter(c => c.status === 'rejected');
 
   const clubColorMap: Record<string, string> = {};
   clubs.forEach(c => { clubColorMap[c.id] = c.color; });
+
+  if (currentUser?.role === 'admin' && !currentUser.clubId) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
+        <p className="text-lg mb-1">Collaborations are for club officers</p>
+        <p className="text-sm">Root admins can manage collaborators directly from each event page.</p>
+      </div>
+    );
+  }
 
   if (loading) {
     return <div className="text-muted-foreground py-8 text-center">Loading collaborations…</div>;
@@ -268,7 +280,7 @@ export function Collab() {
         </Card>
       )}
 
-      {/* Accepted collaborations */}
+      {/* Upcoming accepted collaborations */}
       <Card>
         <CardHeader>
           <CardTitle>Upcoming Collaborative Events</CardTitle>
@@ -276,10 +288,10 @@ export function Collab() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {accepted.length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">No accepted collaborations yet</div>
+            {upcomingAccepted.length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">No upcoming collaborative events</div>
             )}
-            {accepted.map(collab => {
+            {upcomingAccepted.map(collab => {
               const hostClub = clubs.find(c => c.name === collab.events?.clubs?.name);
               const myClub = clubs.find(c => c.id === currentUser?.clubId);
               return (
@@ -332,6 +344,61 @@ export function Collab() {
           </div>
         </CardContent>
       </Card>
+      {/* Past accepted collaborations */}
+      {pastAccepted.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Past Collaborative Events</CardTitle>
+            <CardDescription>Previously collaborated events</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {pastAccepted.map(collab => {
+                const hostClub = clubs.find(c => c.name === collab.events?.clubs?.name);
+                const myClub = clubs.find(c => c.id === currentUser?.clubId);
+                return (
+                  <div
+                    key={collab.id}
+                    className="border border-border rounded-lg p-4 opacity-60"
+                  >
+                    <div
+                      className="flex items-start gap-3 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+                      onClick={() => collab.events?.id && navigate(`/event/${collab.events.id}`)}
+                    >
+                      <div className="bg-muted text-muted-foreground rounded-lg p-2 mt-1">
+                        <Calendar className="h-5 w-5" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium">{collab.events?.title ?? '—'}</h4>
+                          <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                        {collab.events?.start_time && (
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {format(new Date(collab.events.start_time), 'EEEE, MMMM d, yyyy · h:mm a')}
+                          </p>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {hostClub && (
+                            <Badge style={{ backgroundColor: hostClub.color, color: 'white' }}>
+                              {hostClub.name} (Host)
+                            </Badge>
+                          )}
+                          {myClub && (
+                            <Badge variant="outline" style={{ borderColor: myClub.color, color: myClub.color }}>
+                              {myClub.name} (You)
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

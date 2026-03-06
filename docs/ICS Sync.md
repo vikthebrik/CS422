@@ -24,9 +24,13 @@ In-process cron via `node-cron` — runs inside the same Express process (starte
 
 ## Manually Edited Events
 
-Events with `manually_edited = true` are partially protected:
-- Sync **skips** overwriting: `title`, `description`, `location`, `type_id`
-- Sync **still updates**: `start_time`, `end_time`, `requires_rsvp`, `rsvp_link`
+Events with `manually_edited = true` are **fully frozen** from sync:
+- Sync **only updates**: `last_updated` (timestamp)
+- Sync **skips all other fields**: `title`, `description`, `location`, `type_id`, `start_time`, `end_time`, `requires_rsvp`, `rsvp_link`
+
+This is intentional — a club officer editing an event manually means they've taken ownership of all its details, including the date/time. To resume auto-sync, the officer can click "Resume Auto-Sync" on the event page, which calls `PATCH /events/:id { resumeSync: true }` and sets `manually_edited = false`.
+
+Note: RSVP-only changes (`requiresRsvp`, `rsvpLink`, `rsvpNote`) do **not** set `manually_edited = true`, so editing only the RSVP fields does not freeze the event from future syncs.
 
 ## Club Lookup
 

@@ -17,16 +17,17 @@ Data-fetching hook. Called by [[AppContext]] after [[useClubs]] finishes loading
 
 ## API → Type Mapping
 
-| API field       | Event field          |
-|-----------------|----------------------|
-| `start_time`    | `startTime` (Date)   |
-| `end_time`      | `endTime` (Date)     |
-| `club_id`       | `clubId`             |
-| `type`          | `eventType`          |
-| `requires_rsvp` | `requiresRsvp`       |
-| `rsvp_link`     | `rsvpLink`           |
-| `rsvp_note`     | `rsvpNote`           |
-| `collaborators` | `collaborators` (CollaboratorInfo[]) |
+| API field        | Event field          |
+|------------------|----------------------|
+| `start_time`     | `startTime` (Date)   |
+| `end_time`       | `endTime` (Date)     |
+| `club_id`        | `clubId`             |
+| `type`           | `eventType`          |
+| `requires_rsvp`  | `requiresRsvp`       |
+| `rsvp_link`      | `rsvpLink`           |
+| `rsvp_note`      | `rsvpNote`           |
+| `manually_edited`| `manuallyEdited`     |
+| `collaborators`  | `collaborators` (CollaboratorInfo[]) |
 
 ## typeIdMap
 Maps event type name → UUID. Used by the ICS subscription URL builder.

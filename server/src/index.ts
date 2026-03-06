@@ -815,7 +815,7 @@ app.get('/events', async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { title, description, location, eventType, rsvpLink, requiresRsvp, rsvpNote } = req.body as {
+  const { title, description, location, eventType, rsvpLink, requiresRsvp, rsvpNote, resumeSync } = req.body as {
     title?: string;
     description?: string;
     location?: string;
@@ -823,6 +823,7 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
     rsvpLink?: string | null;
     requiresRsvp?: boolean;
     rsvpNote?: string | null;
+    resumeSync?: boolean;
   };
 
   try {
@@ -850,7 +851,13 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
       typeId = et?.id ?? null;
     }
 
-    const updates: Record<string, any> = { manually_edited: true };
+    const contentChanged = title !== undefined || description !== undefined || location !== undefined || eventType !== undefined;
+    const updates: Record<string, any> = {};
+    if (resumeSync) {
+      updates.manually_edited = false;
+    } else if (contentChanged) {
+      updates.manually_edited = true;
+    }
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (location !== undefined) updates.location = location;
