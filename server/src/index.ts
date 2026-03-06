@@ -68,7 +68,7 @@
 import express from 'express';
 import cors from 'cors';
 import crypto from 'crypto';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from './db/supabase';
 import { getFromCache, setInCache, clearCacheKey, clearAllCache } from './cache';
@@ -97,25 +97,20 @@ async function sendPasswordReset(email: string) {
 
   const resetUrl = `${frontendUrl}/reset-password?token_hash=${data.properties.hashed_token}&type=recovery`;
 
-  if (!process.env.SMTP_HOST) {
-    log.warn(`SMTP not configured — skipping password reset email for ${email}`);
+  if (!process.env.RESEND_API_KEY) {
+    log.warn(`RESEND_API_KEY not configured — skipping password reset email for ${email}`);
     return;
   }
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT ?? '587'),
-      secure: parseInt(process.env.SMTP_PORT ?? '587') === 465,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM ?? '"MCC Calendar Hub" <noreply@uomcc.org>',
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM ?? 'MCC Calendar Hub <noreply@uomcc.org>',
       to: email,
       subject: 'Reset your MCC Calendar Hub password',
       html: buildResetEmail(resetUrl),
     });
+    if (error) log.error(`sendPasswordReset email send failed for ${email} — ${error.message}`);
   } catch (err: any) {
     log.error(`sendPasswordReset email send failed for ${email} — ${err.message}`);
   }
