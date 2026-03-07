@@ -66,6 +66,7 @@ interface ApiClub {
     instagram?: string;
     linktree?: string;
     engage?: string;
+    contact_email?: string;
   } | null;
   metadata_tags: {
     description?: string;
@@ -88,6 +89,7 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
     linktree: (apiClub.social_links as any)?.linktree ?? undefined,
     engage: (apiClub.social_links as any)?.engage ?? undefined,
     adminEmail: apiClub.admin_email ?? undefined,
+    contactEmail: (apiClub.social_links as any)?.contact_email ?? undefined,
   };
 }
 

@@ -1124,12 +1124,13 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { name, description, instagram, linktree, engage, outlookLink, sectionLabels } = req.body as {
+  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels } = req.body as {
     name?: string;
     description?: string;
     instagram?: string;
     linktree?: string;
     engage?: string;
+    contactEmail?: string;
     outlookLink?: string;
     sectionLabels?: { exec?: string; board?: string; intern?: string };
   };
@@ -1162,12 +1163,13 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
         ...(sectionLabels !== undefined ? { section_labels: sectionLabels } : {}),
       };
     }
-    if (instagram !== undefined || linktree !== undefined || engage !== undefined) {
+    if (instagram !== undefined || linktree !== undefined || engage !== undefined || contactEmail !== undefined) {
       updates.social_links = {
         ...currentSocial,
         ...(instagram !== undefined ? { instagram } : {}),
         ...(linktree !== undefined ? { linktree } : {}),
         ...(engage !== undefined ? { engage } : {}),
+        ...(contactEmail !== undefined ? { contact_email: contactEmail || null } : {}),
       };
     }
     if (outlookLink !== undefined) {
@@ -1922,7 +1924,7 @@ app.post('/events/:id/collaborators', requireAuth, async (req: AuthenticatedRequ
 
     const { data, error } = await supabase
       .from('collaborations')
-      .upsert({ event_id: id, club_id: clubId, role: 'secondary', status: 'accepted' },
+      .upsert({ event_id: id, club_id: clubId, role: 'secondary', status: 'accepted', manually_removed: false },
         { onConflict: 'event_id,club_id' })
       .select('id, club_id')
       .single();
@@ -1951,7 +1953,7 @@ app.delete('/events/:id/collaborators/:clubId', requireAuth, async (req: Authent
 
     const { error } = await supabase
       .from('collaborations')
-      .delete()
+      .update({ manually_removed: true, status: 'rejected' })
       .eq('event_id', id)
       .eq('club_id', clubId);
 
@@ -1975,7 +1977,8 @@ app.get('/collab', requireAuth, async (req: AuthenticatedRequest, res) => {
         events ( id, title, start_time, end_time,
           clubs ( name, logo_url )
         )
-      `);
+      `)
+      .eq('manually_removed', false);
 
     if (req.userRole === 'club_admin') {
       query = query.eq('club_id', req.userClubId);
@@ -2015,7 +2018,7 @@ app.patch('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
 
     const { error } = await supabase
       .from('collaborations')
-      .update({ status })
+      .update({ status, manually_removed: false })
       .eq('id', id);
 
     if (error) throw error;

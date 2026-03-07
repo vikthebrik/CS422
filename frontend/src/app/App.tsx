@@ -17,6 +17,7 @@
  *                     ├── [public]  ResetPassword    /reset-password
  *                     ├── [public]  RequestAccount   /request-account
  *                     ├── [public]  ConfirmEmail     /confirm-email
+ *                     ├── [public]  Developers       /developers
  *                     ├── [auth]    Collab           /collab
  *                     ├── [auth]    ChangePassword   /change-password
  *                     └── [admin]   ClubManagement   /club-management
@@ -45,6 +46,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { RequestAccount } from './pages/RequestAccount';
 import { ChangePassword } from './pages/ChangePassword';
 import { ConfirmEmail } from './pages/ConfirmEmail';
+import { Developers } from './pages/Developers';
 import { NotFound } from './pages/NotFound';
 import { RouteError } from './pages/RouteError';
 
@@ -64,6 +66,7 @@ const router = createBrowserRouter([
       { path: "reset-password", Component: ResetPassword },
       { path: "request-account", Component: RequestAccount },
       { path: "confirm-email", Component: ConfirmEmail },
+      { path: "developers", Component: Developers },
 
       // Any authenticated user
       {

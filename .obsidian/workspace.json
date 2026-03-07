@@ -178,6 +178,11 @@
   },
   "active": "d0c6a8fa901a1699",
   "lastOpenFiles": [
+    "frontend/node_modules/@react-dnd/asap/LICENSE.md",
+    "server/dist/logger.js",
+    "server/src/db/migrations/015_collab_manually_removed.sql",
+    "frontend/src/app/pages/Developers.tsx",
+    "frontend/public/assets/system_architecture.png",
     "docs/system-architecture.md",
     "system_architecture",
     "system_architecture.png",

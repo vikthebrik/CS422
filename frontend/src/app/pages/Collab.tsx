@@ -122,16 +122,6 @@ export function Collab() {
   const clubColorMap: Record<string, string> = {};
   clubs.forEach(c => { clubColorMap[c.id] = c.color; });
 
-  if (currentUser?.role === 'admin' && !currentUser.clubId) {
-    return (
-      <div className="text-center py-16 text-muted-foreground">
-        <Users className="h-10 w-10 mx-auto mb-3 opacity-40" />
-        <p className="text-lg mb-1">Collaborations are for club officers</p>
-        <p className="text-sm">Root admins can manage collaborators directly from each event page.</p>
-      </div>
-    );
-  }
-
   if (loading) {
     return <div className="text-muted-foreground py-8 text-center">Loading collaborations…</div>;
   }
@@ -141,7 +131,9 @@ export function Collab() {
       <div>
         <h2 className="text-2xl mb-1">Collaborations</h2>
         <p className="text-muted-foreground">
-          Events your club has been invited to collaborate on via Outlook Calendar
+          {currentUser?.clubId
+            ? 'Events your club has been invited to collaborate on via Outlook Calendar'
+            : 'All collaboration invites across every club'}
         </p>
       </div>
 
@@ -293,7 +285,7 @@ export function Collab() {
             )}
             {upcomingAccepted.map(collab => {
               const hostClub = clubs.find(c => c.name === collab.events?.clubs?.name);
-              const myClub = clubs.find(c => c.id === currentUser?.clubId);
+              const myClub = clubs.find(c => c.id === currentUser?.clubId) ?? clubs.find(c => c.id === collab.club_id);
               return (
                 <div
                   key={collab.id}
@@ -325,7 +317,7 @@ export function Collab() {
                           )}
                           {myClub && (
                             <Badge variant="outline" style={{ borderColor: myClub.color, color: myClub.color }}>
-                              {myClub.name} (You)
+                              {myClub.name}{currentUser?.clubId ? ' (You)' : ''}
                             </Badge>
                           )}
                         </div>
@@ -355,7 +347,7 @@ export function Collab() {
             <div className="space-y-4">
               {pastAccepted.map(collab => {
                 const hostClub = clubs.find(c => c.name === collab.events?.clubs?.name);
-                const myClub = clubs.find(c => c.id === currentUser?.clubId);
+                const myClub = clubs.find(c => c.id === currentUser?.clubId) ?? clubs.find(c => c.id === collab.club_id);
                 return (
                   <div
                     key={collab.id}
@@ -386,7 +378,7 @@ export function Collab() {
                           )}
                           {myClub && (
                             <Badge variant="outline" style={{ borderColor: myClub.color, color: myClub.color }}>
-                              {myClub.name} (You)
+                              {myClub.name}{currentUser?.clubId ? ' (You)' : ''}
                             </Badge>
                           )}
                         </div>

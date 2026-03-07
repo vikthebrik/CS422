@@ -34,7 +34,7 @@ import { Outlet, Link, useLocation } from 'react-router';
 import { NavigationBar } from './NavigationBar';
 import { FilterSidebar } from './FilterSidebar';
 import { EventReminderPopup } from './EventReminderPopup';
-import { Calendar, Users, BookOpen, Building2, Info } from 'lucide-react';
+import { Calendar, Users, BookOpen, Building2, Info, Code2 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toaster } from './ui/sonner';
 
@@ -49,6 +49,7 @@ export function Layout() {
     { name: 'Collaborate', href: '/collab', icon: Users, roles: ['admin', 'club_officer'] },
     { name: 'Clubs', href: '/club-management', icon: Building2, roles: ['admin'] },
     { name: 'About', href: '/about', icon: Info, public: true },
+    { name: 'How to Use', href: '/developers', icon: Code2, public: true },
   ];
 
   const visibleNavigation = navigation.filter(item =>

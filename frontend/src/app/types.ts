@@ -60,6 +60,8 @@ export interface Club {
   engage?: string;
   /** Login/contact email for the club admin account */
   adminEmail?: string;
+  /** Public contact email stored in social_links (overrides adminEmail in display) */
+  contactEmail?: string;
   /** Custom section names for department orgs (exec/board/intern tiers) */
   sectionLabels?: { exec?: string; board?: string; intern?: string };
 }

@@ -75,8 +75,9 @@ export function ClubPage() {
   const [savingEmail, setSavingEmail] = useState(false);
 
   const copyEmail = () => {
-    if (!club?.adminEmail) return;
-    navigator.clipboard.writeText(club.adminEmail);
+    const email = club?.contactEmail || club?.adminEmail;
+    if (!email) return;
+    navigator.clipboard.writeText(email);
     setEmailCopied(true);
     setTimeout(() => setEmailCopied(false), 2000);
   };
@@ -85,14 +86,14 @@ export function ClubPage() {
     if (!club || !emailInput.trim()) return;
     setSavingEmail(true);
     try {
-      const res = await fetch(`${API_BASE}/admin/clubs/${club.id}/email`, {
+      const res = await fetch(`${API_BASE}/clubs/${club.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ newEmail: emailInput.trim() }),
+        body: JSON.stringify({ contactEmail: emailInput.trim() }),
       });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? 'Failed to update email'); return; }
-      updateClub(club.id, { adminEmail: data.email });
+      updateClub(club.id, { contactEmail: emailInput.trim() });
       setEditingEmail(false);
     } catch {
       toast.error('Could not reach the server');
@@ -213,6 +214,7 @@ export function ClubPage() {
       instagram: formData.get('club-instagram') as string,
       linktree: formData.get('club-linktree') as string,
       engage: formData.get('club-engage') as string,
+      contactEmail: formData.get('club-contact-email') as string,
       outlookLink: formData.get('club-ics-url') as string,
     };
     if (currentUser?.role === 'admin') {
@@ -342,7 +344,7 @@ export function ClubPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Contact email — visible to all, editable by root */}
-          {(club.adminEmail || currentUser?.role === 'admin') && (
+          {((club.contactEmail || club.adminEmail) || currentUser?.role === 'admin') && (
             <div className="flex items-center gap-2">
               <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
               {editingEmail ? (
@@ -367,14 +369,14 @@ export function ClubPage() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  {club.adminEmail ? (
+                  {(club.contactEmail || club.adminEmail) ? (
                     <button
                       type="button"
                       onClick={copyEmail}
                       className="inline-flex items-center gap-1.5 text-sm font-mono hover:text-primary transition-colors"
                       title="Click to copy"
                     >
-                      {club.adminEmail}
+                      {club.contactEmail || club.adminEmail}
                       {emailCopied
                         ? <Check className="h-3.5 w-3.5 text-green-500" />
                         : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
@@ -385,7 +387,7 @@ export function ClubPage() {
                   {currentUser?.role === 'admin' && (
                     <button
                       type="button"
-                      onClick={() => { setEmailInput(club.adminEmail ?? ''); setEditingEmail(true); }}
+                      onClick={() => { setEmailInput(club.contactEmail ?? club.adminEmail ?? ''); setEditingEmail(true); }}
                       className="text-muted-foreground hover:text-foreground transition-colors"
                       title="Edit email"
                     >
@@ -544,7 +546,7 @@ export function ClubPage() {
 
       {/* Edit Club Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Organization Information</DialogTitle>
             <DialogDescription>Update organization details, social media links, and calendar feed</DialogDescription>
@@ -591,6 +593,13 @@ export function ClubPage() {
             <div>
               <Label htmlFor="club-engage">Engage URL</Label>
               <Input id="club-engage" name="club-engage" defaultValue={club.engage} placeholder="https://engage.uoregon.edu/..." />
+            </div>
+            <div>
+              <Label htmlFor="club-contact-email">Contact Email</Label>
+              <Input id="club-contact-email" name="club-contact-email" type="email" defaultValue={club.contactEmail ?? club.adminEmail} placeholder="contact@uoregon.edu" />
+              <p className="text-xs text-muted-foreground mt-1">
+                Public contact email shown on the club page. Useful when the admin login email differs from the club's public address.
+              </p>
             </div>
             <div>
               <Label htmlFor="club-ics-url">Outlook Calendar ICS URL</Label>
