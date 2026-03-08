@@ -14,6 +14,7 @@
  * Filters are local state — no impact on the global dashboard filter.
  */
 import { Users, ExternalLink, Plus, Download, Search, Building2 } from 'lucide-react';
+import { ErrorState } from '../components/ErrorState';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { useApp } from '../context/AppContext';
@@ -35,7 +36,7 @@ const SECTION_LABELS: Record<Section, string> = { exec: 'Executive Team', board:
 const ALL_SECTIONS: Section[] = ['exec', 'board', 'intern'];
 
 export function ClubRoster() {
-  const { clubs, currentUser, addClub } = useApp();
+  const { clubs, currentUser, addClub, error } = useApp();
   const navigate = useNavigate();
   const [isAddClubOpen, setIsAddClubOpen] = useState(false);
 
@@ -177,6 +178,10 @@ export function ClubRoster() {
     toast.success(`Club "${clubName}" added successfully. Username: ${username}`);
     setIsAddClubOpen(false);
   };
+
+  if (error) {
+    return <ErrorState title="Failed to load organizations" message={error} />;
+  }
 
   return (
     <div className="space-y-6">

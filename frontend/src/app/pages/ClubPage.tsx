@@ -24,7 +24,7 @@
  * | Change email   | PATCH /admin/clubs/:id/email | updateClub()  |
  */
 import { useParams, useNavigate } from 'react-router';
-import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X, Download, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -42,7 +42,7 @@ import { LogoUpload } from '../components/LogoUpload';
 import { OurTeam } from '../components/OurTeam';
 import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Event } from '../types';
+import { Event, MeetingScheduleEntry } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
@@ -67,6 +67,11 @@ export function ClubPage() {
 
   const club = clubs.find(c => c.id === clubId);
   const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === clubId);
+
+  // Meeting schedule state
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [scheduleRows, setScheduleRows] = useState<MeetingScheduleEntry[]>([]);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   // Email copy + edit state
   const [emailCopied, setEmailCopied] = useState(false);
@@ -100,6 +105,48 @@ export function ClubPage() {
     } finally {
       setSavingEmail(false);
     }
+  };
+
+  const openScheduleEdit = () => {
+    setScheduleRows(club?.meetingSchedule ? [...club.meetingSchedule] : [{ day: '', time: '', location: '', notes: '' }]);
+    setIsScheduleOpen(true);
+  };
+
+  const saveSchedule = async () => {
+    if (!club) return;
+    const cleaned = scheduleRows.filter(r => r.day.trim() || r.time.trim() || r.location.trim());
+    setSavingSchedule(true);
+    try {
+      const res = await fetch(`${API_BASE}/clubs/${club.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ meetingSchedule: cleaned }),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to save'); return; }
+      updateClub(club.id, { meetingSchedule: cleaned });
+      setIsScheduleOpen(false);
+      toast.success('Meeting schedule saved');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingSchedule(false);
+    }
+  };
+
+  const downloadScheduleCsv = () => {
+    if (!club?.meetingSchedule?.length) return;
+    const header = 'Day,Time,Location,Notes';
+    const rows = club.meetingSchedule.map(r =>
+      [r.day, r.time, r.location, r.notes ?? ''].map(v => `"${v.replace(/"/g, '""')}"`).join(',')
+    );
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${club.name.replace(/\s+/g, '_')}_meeting_schedule.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const allUpcoming = clubId ? getUpcomingClubEvents(events, clubId) : [];
@@ -543,6 +590,138 @@ export function ClubPage() {
           />
         </CardContent>
       </Card>
+
+      {/* Meeting Schedule */}
+      {(club.meetingSchedule?.length || canEdit) && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Meeting Schedule</CardTitle>
+                <CardDescription>Approximate recurring meeting times for {club.name}</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                {club.meetingSchedule?.length ? (
+                  <Button variant="outline" size="sm" onClick={downloadScheduleCsv}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download CSV
+                  </Button>
+                ) : null}
+                {canEdit && (
+                  <Button variant="outline" size="sm" onClick={openScheduleEdit}>
+                    <Pencil className="h-4 w-4 mr-1" />
+                    {club.meetingSchedule?.length ? 'Edit' : 'Add Schedule'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!club.meetingSchedule?.length ? (
+              <p className="text-sm text-muted-foreground">No meeting schedule set yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-28">Day</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-36">Time</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Location</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {club.meetingSchedule.map((row, i) => (
+                      <tr key={i}>
+                        <td className="py-2 pr-4 font-medium">{row.day}</td>
+                        <td className="py-2 pr-4 text-muted-foreground">{row.time}</td>
+                        <td className="py-2 pr-4 flex items-center gap-1">
+                          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
+                          {row.location}
+                        </td>
+                        <td className="py-2 text-muted-foreground text-xs">{row.notes ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Meeting Schedule Edit Dialog */}
+      <Dialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Meeting Schedule</DialogTitle>
+            <DialogDescription>Add recurring meeting times. Students will see these on your club page.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {scheduleRows.map((row, i) => (
+              <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-start">
+                <div>
+                  {i === 0 && <Label className="text-xs mb-1 block">Day</Label>}
+                  <Input
+                    placeholder="e.g. Monday"
+                    value={row.day}
+                    onChange={e => setScheduleRows(rows => rows.map((r, j) => j === i ? { ...r, day: e.target.value } : r))}
+                  />
+                </div>
+                <div>
+                  {i === 0 && <Label className="text-xs mb-1 block">Time</Label>}
+                  <Input
+                    placeholder="e.g. 6:00–7:00 PM"
+                    value={row.time}
+                    onChange={e => setScheduleRows(rows => rows.map((r, j) => j === i ? { ...r, time: e.target.value } : r))}
+                  />
+                </div>
+                <div>
+                  {i === 0 && <Label className="text-xs mb-1 block">Location</Label>}
+                  <Input
+                    placeholder="e.g. EMU 204"
+                    value={row.location}
+                    onChange={e => setScheduleRows(rows => rows.map((r, j) => j === i ? { ...r, location: e.target.value } : r))}
+                  />
+                </div>
+                <div className={i === 0 ? 'pt-5' : ''}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setScheduleRows(rows => rows.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-4 w-4 text-muted-foreground" />
+                  </Button>
+                </div>
+                <div className="col-span-3">
+                  <Input
+                    placeholder="Notes (optional) — e.g. Biweekly, members only"
+                    value={row.notes ?? ''}
+                    onChange={e => setScheduleRows(rows => rows.map((r, j) => j === i ? { ...r, notes: e.target.value } : r))}
+                  />
+                </div>
+                <div />
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setScheduleRows(rows => [...rows, { day: '', time: '', location: '', notes: '' }])}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Row
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button type="button" variant="outline" onClick={() => setIsScheduleOpen(false)}>Cancel</Button>
+            <Button type="button" className="bg-primary" onClick={saveSchedule} disabled={savingSchedule}>
+              {savingSchedule ? 'Saving…' : 'Save Schedule'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Club Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

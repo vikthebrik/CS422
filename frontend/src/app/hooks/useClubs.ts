@@ -72,6 +72,7 @@ interface ApiClub {
     description?: string;
     color?: string;
     section_labels?: { exec?: string; board?: string; intern?: string };
+    meeting_schedule?: Array<{ day: string; time: string; location: string; notes?: string }>;
   } | null;
 }
 
@@ -85,6 +86,7 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
     outlookLink: apiClub.ics_source_url ?? undefined,
     description: apiClub.metadata_tags?.description ?? undefined,
     sectionLabels: apiClub.metadata_tags?.section_labels ?? undefined,
+    meetingSchedule: apiClub.metadata_tags?.meeting_schedule ?? undefined,
     instagram: (apiClub.social_links as any)?.instagram ?? undefined,
     linktree: (apiClub.social_links as any)?.linktree ?? undefined,
     engage: (apiClub.social_links as any)?.engage ?? undefined,

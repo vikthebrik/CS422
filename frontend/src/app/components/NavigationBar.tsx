@@ -21,7 +21,7 @@
  */
 
 import { Menu, LogOut, KeyRound } from 'lucide-react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useLocation } from 'react-router';
 import { Button } from './ui/button';
 import { useApp } from '../context/AppContext';
 import { useState } from 'react';
@@ -37,6 +37,8 @@ interface NavigationBarProps {
 export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
   const { currentUser, setCurrentUser, setAuthToken, clubs } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isDashboard = location.pathname === '/';
 
   const userClub = currentUser?.clubId ? clubs.find(c => c.id === currentUser.clubId) : null;
   const displayName = userClub?.name ?? currentUser?.name ?? '';
@@ -54,14 +56,16 @@ export function NavigationBar({ onToggleSidebar }: NavigationBarProps) {
       <nav className="bg-card border-b border-border px-4 py-3 sticky top-0 z-50">
         <div className="flex items-center justify-between max-w-[1600px] mx-auto">
           <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
-              onClick={onToggleSidebar}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
+            {isDashboard && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="lg:hidden"
+                onClick={onToggleSidebar}
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
+            )}
             <Link
               to="/"
               className="flex items-center gap-2 hover:opacity-90 transition-opacity"

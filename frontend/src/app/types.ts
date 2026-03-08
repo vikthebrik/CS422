@@ -46,6 +46,13 @@ export interface Event {
   collaborators?: CollaboratorInfo[];
 }
 
+export interface MeetingScheduleEntry {
+  day: string;
+  time: string;
+  location: string;
+  notes?: string;
+}
+
 export interface Club {
   id: string;
   name: string;
@@ -64,6 +71,8 @@ export interface Club {
   contactEmail?: string;
   /** Custom section names for department orgs (exec/board/intern tiers) */
   sectionLabels?: { exec?: string; board?: string; intern?: string };
+  /** Approximate recurring meeting schedule — stored in metadata_tags.meeting_schedule */
+  meetingSchedule?: MeetingScheduleEntry[];
 }
 
 export interface User {
@@ -90,19 +99,39 @@ export const EVENT_TYPES = [
 // About-page block types (CMS stored in site_settings table)
 // ---------------------------------------------------------------------------
 
-export interface TextBlock {
+// ---------------------------------------------------------------------------
+// About-page block types (CMS stored in site_settings table)
+// ---------------------------------------------------------------------------
+
+export interface BlockStyle {
+  backgroundColor?: string;
+  textColor?: string;
+  borderColor?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
+  padding?: 'none' | 'small' | 'medium' | 'large' | 'xlarge';
+  borderRadius?: 'none' | 'small' | 'medium' | 'large' | 'full';
+  shadow?: 'none' | 'small' | 'medium' | 'large';
+  useCard?: boolean;
+}
+
+export interface BaseBlock {
   id: string;
+  style?: BlockStyle;
+}
+
+export interface TextBlock extends BaseBlock {
   type: 'text';
   title?: string;
   content: string;
+  contentType?: 'plain' | 'markdown';
 }
 
-export interface MediaBlock {
-  id: string;
+export interface MediaBlock extends BaseBlock {
   type: 'media';
   mediaType: 'image' | 'video';
   url: string;
   caption?: string;
+  layout?: 'full' | 'inline-left' | 'inline-right';
 }
 
 export interface LinkItem {
@@ -111,15 +140,13 @@ export interface LinkItem {
   description?: string;
 }
 
-export interface LinkContainerBlock {
-  id: string;
+export interface LinkContainerBlock extends BaseBlock {
   type: 'links';
   title?: string;
   links: LinkItem[];
 }
 
-export interface ClubShowcaseBlock {
-  id: string;
+export interface ClubShowcaseBlock extends BaseBlock {
   type: 'clubs';
   title?: string;
   clubIds: string[];

@@ -49,7 +49,7 @@ export function Layout() {
     { name: 'Collaborate', href: '/collab', icon: Users, roles: ['admin', 'club_officer'] },
     { name: 'Clubs', href: '/club-management', icon: Building2, roles: ['admin'] },
     { name: 'About', href: '/about', icon: Info, public: true },
-    { name: 'How to Use', href: '/developers', icon: Code2, public: true },
+    { name: 'Usage Guide', href: '/developers', icon: Code2, public: true },
   ];
 
   const visibleNavigation = navigation.filter(item =>
@@ -63,12 +63,16 @@ export function Layout() {
     return location.pathname.startsWith(href);
   };
 
+  const isDashboard = location.pathname === '/';
+
   return (
     <div className="min-h-screen flex flex-col">
       <NavigationBar onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
 
       <div className="flex flex-1">
-        <FilterSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        {isDashboard && (
+          <FilterSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+        )}
 
         <main className="flex-1 overflow-auto min-w-0">
           <div className="max-w-[1200px] mx-auto p-4 sm:p-6 lg:p-8 min-w-0 overflow-x-hidden">
@@ -85,8 +89,8 @@ export function Layout() {
                         className={`
                           flex flex-1 sm:flex-none items-center justify-center sm:justify-start gap-2 px-2 sm:px-4 py-3 border-b-2 transition-colors
                           ${isActive(item.href)
-                            ? 'border-primary text-primary'
-                            : 'border-transparent text-muted-foreground hover:text-foreground'
+                            ? 'border-accent text-primary font-medium'
+                            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-accent/40'
                           }
                         `}
                       >

@@ -1,6 +1,6 @@
 /**
  * @file cron.ts
- * @description In-process ICS sync scheduler using node-cron.
+ * @description In-process ICS sync scheduler.
  *
  * ## Behavior
  * - Runs on a configurable cron schedule (default: every 14 minutes).
@@ -11,16 +11,18 @@
  *   request returns fresh data.
  *
  * ## Configuration
- * SYNC_CRON_SCHEDULE env var (default: every 14 min — "every14" in cron notation)
+ * SYNC_CRON_SCHEDULE env var (default: every 14 min — every14 notation).
  * Override with any valid cron string, e.g. "0 * * * *" for hourly.
+ *
+ * ## Implementation note
+ * node-cron v4 has a DST infinite-loop bug in its LocalizedTime.getTimezoneGMT()
+ * that causes 100% CPU on every DST spring-forward (the missed-execution while
+ * loop gets stuck because the computed "next" time goes backward). We use
+ * node-cron only for expression validation; scheduling itself uses setInterval
+ * aligned to the wall-clock boundary, which is immune to this issue.
  *
  * ## Called from
  * `server/src/index.ts` on startup: `startCron()`
- *
- * ## Sync details
- * See `populate_supabase.ts` for the ICS parsing + upsert logic. The sync
- * honours the `events.manually_edited` flag — manually edited fields
- * (title, description, location, type_id) are not overwritten by the sync.
  */
 import cron from 'node-cron';
 import { supabase } from './db/supabase';
@@ -96,6 +98,20 @@ async function runSync() {
   if (SYNC_HISTORY.length > MAX_SYNC_HISTORY) SYNC_HISTORY.shift();
 }
 
+// Parse a simple every-N-minutes or every-N-hours cron into milliseconds.
+// Returns null if the pattern is not a simple periodic interval.
+function parseIntervalMs(expr: string): number | null {
+  // Matches "*/N * * * *" — every N minutes
+  const everyNMin = expr.match(/^\*\/(\d+)\s+\*\s+\*\s+\*\s+\*$/);
+  if (everyNMin) return parseInt(everyNMin[1], 10) * 60 * 1000;
+
+  // Matches "0 */N * * *" — every N hours (at :00)
+  const everyNHour = expr.match(/^0\s+\*\/(\d+)\s+\*\s+\*\s+\*$/);
+  if (everyNHour) return parseInt(everyNHour[1], 10) * 60 * 60 * 1000;
+
+  return null;
+}
+
 export function startCron() {
   CRON_SCHEDULE = process.env.SYNC_CRON_SCHEDULE ?? '*/14 * * * *';
 
@@ -104,8 +120,26 @@ export function startCron() {
     return;
   }
 
-  cron.schedule(CRON_SCHEDULE, runSync, { timezone: 'America/Los_Angeles' });
-  log.cron(`Sync scheduled: "${CRON_SCHEDULE}" (America/Los_Angeles)`);
+  const intervalMs = parseIntervalMs(CRON_SCHEDULE);
+  if (intervalMs === null) {
+    // Complex expression: fall back to node-cron but without timezone to
+    // minimise (but not eliminate) the DST bug surface.
+    cron.schedule(CRON_SCHEDULE, runSync);
+    log.cron(`Sync scheduled via node-cron: "${CRON_SCHEDULE}"`);
+    return;
+  }
+
+  // Align the first run to the next wall-clock boundary, then repeat.
+  // e.g. for 14 min: if now is HH:09, wait 5 min so first run is at HH:14.
+  // setInterval counts milliseconds — no timezone library, no DST issues.
+  const msToNextBoundary = intervalMs - (Date.now() % intervalMs);
+  setTimeout(() => {
+    runSync();
+    setInterval(runSync, intervalMs);
+  }, msToNextBoundary);
+
+  const mins = Math.round(intervalMs / 60000);
+  log.cron(`Sync scheduled every ${mins} min (next run in ${Math.round(msToNextBoundary / 1000)}s)`);
 }
 
 export async function triggerSync() {

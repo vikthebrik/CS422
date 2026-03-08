@@ -191,8 +191,14 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like curl requests)
+    // Allow requests with no origin (curl, server-to-server)
     if (!origin) return callback(null, true);
+
+    // Allow any localhost origin — covers the admin dashboard served from the
+    // server itself (http://localhost:4000) and local frontend dev servers
+    if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) {
+      return callback(null, true);
+    }
 
     // Exact match from ALLOWED_ORIGINS
     if (allowedOrigins.includes(origin)) {
@@ -212,7 +218,44 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '8mb' })); // increased for base64 logo uploads
+app.get('/favicon.ico', (_req, res) => res.status(204).end()); // silence browser auto-requests
 app.use(requestLogger);
+
+// ---------------------------------------------------------------------------
+// In-memory metrics (session lifetime, reset on restart)
+// ---------------------------------------------------------------------------
+const REQ_METRICS: Record<string, number> = {
+  total: 0, errors4xx: 0, errors5xx: 0,
+  '/clubs': 0, '/events': 0, '/event-types': 0,
+  '/auth': 0, '/collab': 0, '/admin': 0,
+};
+
+const USER_METRICS: Record<string, number> = {
+  loginsOk: 0, loginsFail: 0,
+  sessionChecks: 0,       // /auth/me calls — each app mount
+  passwordResets: 0,      // forgot-password requests
+  accountRequests: 0,     // new club account submissions
+  icsDownloads: 0,        // ICS calendar subscriptions served
+  collabAccepted: 0,
+  collabRejected: 0,
+  eventsCreated: 0,
+  eventsEdited: 0,
+};
+app.use((req, res, next) => {
+  REQ_METRICS.total++;
+  const p = req.path;
+  if (p.startsWith('/clubs')) REQ_METRICS['/clubs']++;
+  else if (p.startsWith('/events')) REQ_METRICS['/events']++;
+  else if (p.startsWith('/event-types')) REQ_METRICS['/event-types']++;
+  else if (p.startsWith('/auth')) REQ_METRICS['/auth']++;
+  else if (p.startsWith('/collab')) REQ_METRICS['/collab']++;
+  else if (p.startsWith('/admin')) REQ_METRICS['/admin']++;
+  res.on('finish', () => {
+    if (res.statusCode >= 500) REQ_METRICS.errors5xx++;
+    else if (res.statusCode >= 400) REQ_METRICS.errors4xx++;
+  });
+  next();
+});
 
 // ---------------------------------------------------------------------------
 // Health check
@@ -239,6 +282,7 @@ app.post('/auth/login', async (req, res) => {
 
   const { data, error } = await makeAuthClient().auth.signInWithPassword({ email, password });
   if (error || !data.session) {
+    USER_METRICS.loginsFail++;
     return res.status(401).json({ error: error?.message ?? 'Login failed' });
   }
 
@@ -259,6 +303,7 @@ app.post('/auth/login', async (req, res) => {
     club_admin: 'club_officer',
   };
 
+  USER_METRICS.loginsOk++;
   return res.json({
     token: data.session.access_token,
     user: {
@@ -273,6 +318,7 @@ app.post('/auth/login', async (req, res) => {
 
 // GET /auth/me — validate a stored token and return the user
 app.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
+  USER_METRICS.sessionChecks++;
   const { data: roleRow } = await supabase
     .from('user_roles')
     .select('role, club_id')
@@ -307,6 +353,7 @@ app.post('/auth/forgot-password', async (req, res) => {
   const { email } = req.body as { email?: string };
   if (!email) return res.status(400).json({ error: 'email is required' });
 
+  USER_METRICS.passwordResets++;
   // Respond immediately — never leak whether the email exists, and don't block on SMTP.
   res.json({ status: 'ok' });
   sendPasswordReset(email.trim().toLowerCase()).catch(err =>
@@ -446,6 +493,8 @@ app.get('/status', (_req, res) => {
     cronSchedule: getCronSchedule(),
     cache: getCacheStatus(),
     syncHistory: getSyncHistory(),
+    metrics: { ...REQ_METRICS },
+    userMetrics: { ...USER_METRICS },
     log: getLogBuffer().slice(-100),
   });
 });
@@ -477,40 +526,51 @@ app.get('/', (_req, res) => {
   header p{font-size:12px;color:rgba(255,255,255,0.65);margin-top:2px}
   .header-right{margin-left:auto;display:flex;align-items:center;gap:12px}
   #uptime{font-size:12px;color:rgba(255,255,255,0.6);font-variant-numeric:tabular-nums}
-  main{padding:24px;max-width:1400px;margin:0 auto;display:grid;gap:20px;grid-template-columns:1fr 1fr}
-  .full{grid-column:1/-1}
+  main{padding:24px;max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+  .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
   .card-header h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
   .card-body{padding:18px}
-  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}
   .stat{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px}
   .stat-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
   .stat-value{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+  .stat-sub{font-size:11px;color:var(--muted);margin-top:3px}
   .ok{color:var(--teal)} .err{color:var(--red)} .warn{color:var(--yellow)} .info{color:var(--blue)} .muted{color:var(--muted)}
+  .tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:360px}
   table{width:100%;border-collapse:collapse;font-size:13px}
-  th{text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border)}
+  th{position:sticky;top:0;background:var(--surface);text-align:left;padding:8px 12px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;z-index:1}
   td{padding:8px 12px;border-bottom:1px solid rgba(48,54,61,0.5);vertical-align:top}
   tr:last-child td{border-bottom:none}
+  tr.row-err td{background:rgba(248,81,73,0.06)}
   .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
   .badge-ok{background:rgba(57,211,83,0.15);color:var(--teal)}
   .badge-err{background:rgba(248,81,73,0.15);color:var(--red)}
   .badge-warn{background:rgba(210,153,34,0.15);color:var(--yellow)}
   .badge-info{background:rgba(88,166,255,0.15);color:var(--blue)}
-  .badge-http{background:rgba(139,148,158,0.15);color:var(--muted)}
-  pre.log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6;overflow-x:auto;max-height:400px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+  pre.log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:'SF Mono','Cascadia Code',Consolas,monospace;font-size:12px;line-height:1.6;overflow-x:auto;max-height:360px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
   .log-info{color:var(--blue)} .log-success{color:var(--teal)} .log-warn{color:var(--yellow)}
   .log-error{color:var(--red)} .log-cron{color:#c9d1d9} .log-auth{color:#79c0ff}
   .log-http{color:var(--muted)} .log-cache{color:#6e7681}
-  .sync-btn{background:var(--green);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer}
+  .sync-btn{background:var(--green);color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap}
   .sync-btn:hover{background:var(--green-light)}
   .sync-btn:disabled{opacity:.5;cursor:not-allowed}
-  .locked{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;color:var(--muted);text-align:center}
-  .locked svg{opacity:.4}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
   .dot-ok{background:var(--teal)} .dot-err{background:var(--red)}
-  #last-updated{font-size:11px;color:var(--muted)}
-  .cache-tag{display:inline-block;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-family:monospace;font-size:12px;margin:2px}
+  #last-updated{font-size:11px;color:var(--muted);white-space:nowrap}
+  .club-tag{display:inline-block;border-radius:4px;padding:2px 7px;font-family:monospace;font-size:11px;margin:2px;border:1px solid}
+  .club-tag-ok{color:var(--teal);border-color:rgba(57,211,83,0.3);background:rgba(57,211,83,0.08)}
+  .club-tag-err{color:var(--red);border-color:rgba(248,81,73,0.4);background:rgba(248,81,73,0.12);font-weight:600}
+  .err-detail{font-size:11px;color:var(--red);margin-top:4px;font-family:monospace;word-break:break-all;opacity:.85}
+  .cache-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+  .cache-item{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:10px 14px}
+  .cache-key{font-family:monospace;font-size:12px;color:var(--blue);word-break:break-all}
+  .cache-ttl{font-size:11px;color:var(--teal);margin-top:5px;font-variant-numeric:tabular-nums}
+  .cache-bar{height:3px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden}
+  .cache-bar-fill{height:100%;background:var(--teal);border-radius:2px;transition:width .3s}
+  .empty-hint{color:var(--muted);font-size:12px;line-height:1.6;padding:4px 0}
+  @media(max-width:700px){.two-col{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -525,12 +585,13 @@ app.get('/', (_req, res) => {
   </div>
 </header>
 <main id="main">
-  <div class="full" style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>
+  <div style="padding:40px;text-align:center;color:var(--muted)">Loading…</div>
 </main>
 
 <script>
 let data = null;
 let pollTimer = null;
+const CACHE_TTL_SECONDS = 120;
 
 fetchStatus();
 
@@ -560,9 +621,8 @@ function ago(iso) {
   return Math.floor(s/3600) + 'h ago';
 }
 
-function levelBadge(level) {
-  const map = {info:'info',success:'ok',warn:'warn',error:'err',cron:'info',auth:'info',http:'http',cache:'http'};
-  return '<span class="badge badge-' + (map[level]||'http') + '">' + level + '</span>';
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function render(d) {
@@ -570,13 +630,19 @@ function render(d) {
   const totalSyncs = d.syncHistory.length;
   const totalOk = d.syncHistory.reduce((a,s) => a+s.succeeded, 0);
   const totalFail = d.syncHistory.reduce((a,s) => a+s.failed, 0);
+  const runsFailed = d.syncHistory.filter(s=>s.failed>0).length;
+  const avgMs = totalSyncs ? Math.round(d.syncHistory.reduce((a,s)=>a+s.durationMs,0)/totalSyncs) : 0;
+  const clubCount = last ? (last.clubs?.length ?? 0) : 0;
+  const m = d.metrics || {};
+  const um = d.userMetrics || {};
 
   document.getElementById('main').innerHTML = \`
-    <!-- Stats row -->
-    <div class="full card">
+
+    <!-- ── 1. Summary metrics ───────────────────────────────── -->
+    <div class="card">
       <div class="card-header">
-        <h2>Server</h2>
-        <span id="last-updated" class="muted"></span>
+        <h2>Server &amp; Sync Summary</h2>
+        <span id="last-updated"></span>
       </div>
       <div class="card-body">
         <div class="stat-grid">
@@ -587,86 +653,192 @@ function render(d) {
           <div class="stat">
             <div class="stat-label">Uptime</div>
             <div class="stat-value" id="uptime-card">—</div>
+            <div class="stat-sub">since \${fmt(d.serverStart)}</div>
           </div>
           <div class="stat">
-            <div class="stat-label">Started</div>
-            <div class="stat-value muted" style="font-size:13px;padding-top:4px">\${fmt(d.serverStart)}</div>
-          </div>
-          <div class="stat">
-            <div class="stat-label">Cron Schedule</div>
-            <div class="stat-value muted" style="font-size:14px;font-family:monospace;padding-top:4px">\${d.cronSchedule}</div>
+            <div class="stat-label">Cron</div>
+            <div class="stat-value muted" style="font-size:15px;font-family:monospace">\${d.cronSchedule}</div>
           </div>
           <div class="stat">
             <div class="stat-label">Last Sync</div>
-            <div class="stat-value \${last && last.failed===0?'ok':last?'warn':'muted'}" style="font-size:14px;padding-top:4px">\${last ? ago(last.completedAt) : 'None'}</div>
+            <div class="stat-value \${last && last.failed===0?'ok':last?'warn':'muted'}" style="font-size:16px">\${last ? ago(last.completedAt) : '—'}</div>
+            <div class="stat-sub">\${last && last.failed>0 ? last.failed+' club(s) failed' : last ? 'all clubs OK' : 'no syncs yet'}</div>
           </div>
           <div class="stat">
             <div class="stat-label">Syncs (session)</div>
             <div class="stat-value">\${totalSyncs}</div>
+            <div class="stat-sub">\${runsFailed} run\${runsFailed!==1?'s':''} with errors</div>
           </div>
           <div class="stat">
             <div class="stat-label">Events Synced</div>
             <div class="stat-value ok">\${totalOk}</div>
+            <div class="stat-sub">\${totalFail} club error\${totalFail!==1?'s':''} total</div>
           </div>
           <div class="stat">
-            <div class="stat-label">Sync Errors</div>
-            <div class="stat-value \${totalFail>0?'err':'muted'}">\${totalFail}</div>
+            <div class="stat-label">Avg Sync Time</div>
+            <div class="stat-value muted" style="font-size:18px">\${avgMs ? avgMs+'ms' : '—'}</div>
+            <div class="stat-sub">\${clubCount} club\${clubCount!==1?'s':''} monitored</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Cache Keys</div>
+            <div class="stat-value \${d.cache.length>0?'info':'muted'}">\${d.cache.length}</div>
+            <div class="stat-sub">cleared on each sync</div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Sync history + Cache -->
+    <!-- ── 2. Request metrics ───────────────────────────────── -->
+    <div class="card">
+      <div class="card-header"><h2>Request Metrics</h2><span class="muted" style="font-size:11px">Since server start · session only</span></div>
+      <div class="card-body">
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-label">Total Requests</div>
+            <div class="stat-value info">\${m.total||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">/events hits</div>
+            <div class="stat-value">\${m['/events']||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">/clubs hits</div>
+            <div class="stat-value">\${m['/clubs']||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">/event-types hits</div>
+            <div class="stat-value">\${m['/event-types']||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">/auth hits</div>
+            <div class="stat-value">\${m['/auth']||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">/collab hits</div>
+            <div class="stat-value">\${m['/collab']||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">4xx Errors</div>
+            <div class="stat-value \${(m.errors4xx||0)>0?'warn':'muted'}">\${m.errors4xx||0}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">5xx Errors</div>
+            <div class="stat-value \${(m.errors5xx||0)>0?'err':'muted'}">\${m.errors5xx||0}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3. User metrics ─────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header"><h2>User Activity</h2><span class="muted" style="font-size:11px">Since server start · session only</span></div>
+      <div class="card-body">
+        <div class="stat-grid">
+          <div class="stat">
+            <div class="stat-label">Logins OK</div>
+            <div class="stat-value ok">\${um.loginsOk||0}</div>
+            <div class="stat-sub">\${um.loginsFail||0} failed attempt\${(um.loginsFail||0)!==1?'s':''}</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Active Sessions</div>
+            <div class="stat-value info">\${um.sessionChecks||0}</div>
+            <div class="stat-sub">/auth/me validations</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">ICS Subscriptions</div>
+            <div class="stat-value info">\${um.icsDownloads||0}</div>
+            <div class="stat-sub">calendar feeds served</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Events Created</div>
+            <div class="stat-value">\${um.eventsCreated||0}</div>
+            <div class="stat-sub">\${um.eventsEdited||0} edited on-site</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Collabs Accepted</div>
+            <div class="stat-value ok">\${um.collabAccepted||0}</div>
+            <div class="stat-sub">\${um.collabRejected||0} rejected</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Password Resets</div>
+            <div class="stat-value \${(um.passwordResets||0)>0?'warn':'muted'}">\${um.passwordResets||0}</div>
+            <div class="stat-sub">forgot-password requests</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Account Requests</div>
+            <div class="stat-value \${(um.accountRequests||0)>0?'warn':'muted'}">\${um.accountRequests||0}</div>
+            <div class="stat-sub">new club submissions</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4. Application log ───────────────────────────────── -->
     <div class="card">
       <div class="card-header">
-        <h2>Sync History</h2>
-        <button class="sync-btn" id="sync-btn" onclick="triggerSync()">▶ Run Now</button>
+        <h2>Application Log</h2>
+        <span class="muted" style="font-size:11px">Last 100 entries · refreshes every 5s</span>
       </div>
-      <div class="card-body" style="padding:0">
-        \${d.syncHistory.length === 0
-          ? '<p style="padding:18px;color:var(--muted)">No syncs yet this session.</p>'
-          : '<table><thead><tr><th>Time</th><th>Duration</th><th>OK</th><th>Failed</th><th>Clubs</th></tr></thead><tbody>'
-            + [...d.syncHistory].reverse().map(s => \`
-              <tr>
-                <td style="white-space:nowrap">\${fmt(s.completedAt)}</td>
-                <td class="muted">\${s.durationMs}ms</td>
-                <td class="ok">\${s.succeeded}</td>
-                <td class="\${s.failed>0?'err':'muted'}">\${s.failed}</td>
-                <td>\${s.clubs.map(c => '<span title="'+(c.error||'')+'" class="cache-tag \${c.status==="ok"?"ok":"err"}">'+ c.name +'</span>').join('')}</td>
-              </tr>\`).join('')
-            + '</tbody></table>'}
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><h2>Cache</h2></div>
-      <div class="card-body">
-        \${d.cache.length === 0
-          ? '<p class="muted">Cache is empty.</p>'
-          : '<table><thead><tr><th>Key</th><th>Expires in</th></tr></thead><tbody>'
-            + d.cache.map(c => \`
-              <tr>
-                <td><span class="cache-tag">\${c.key}</span></td>
-                <td class="ok">\${Math.round(c.ttlMs/1000)}s</td>
-              </tr>\`).join('')
-            + '</tbody></table>'}
-      </div>
-    </div>
-
-    <!-- Log -->
-    <div class="full card">
-      <div class="card-header"><h2>Application Log</h2><span class="muted" style="font-size:12px">Last 100 entries · auto-refreshes every 5s</span></div>
       <div class="card-body" style="padding:0 18px 18px">
         <pre class="log" id="log-pre">\${[...d.log].reverse().map(e =>
           '<span class="log-'+e.level+'">['+e.ts.replace('T',' ').slice(0,19)+'] ['+e.level.toUpperCase().padEnd(7)+'] '+escHtml(e.msg)+'</span>'
         ).join('\\n')}</pre>
       </div>
     </div>
-  \`;
-}
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    <!-- ── 4. Cache status ──────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Cache</h2>
+        <span class="muted" style="font-size:11px">\${d.cache.length} / 3 key\${d.cache.length!==1?'s':''} active</span>
+      </div>
+      <div class="card-body">
+        \${d.cache.length === 0
+          ? '<p class="empty-hint">Cache is currently empty. It populates when <code style="font-family:monospace;font-size:12px;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px">/clubs</code>, <code style="font-family:monospace;font-size:12px;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px">/events</code>, or <code style="font-family:monospace;font-size:12px;background:rgba(255,255,255,0.06);padding:1px 5px;border-radius:3px">/event-types</code> are requested by the frontend, and is cleared automatically after every sync run.</p>'
+          : '<div class="cache-grid">'
+            + d.cache.map(c => {
+                const pct = Math.min(100, Math.round(c.ttlMs / (CACHE_TTL_SECONDS * 1000) * 100));
+                return '<div class="cache-item">'
+                  + '<div class="cache-key">'+escHtml(c.key)+'</div>'
+                  + '<div class="cache-ttl">⏱ expires in '+Math.round(c.ttlMs/1000)+'s</div>'
+                  + '<div class="cache-bar"><div class="cache-bar-fill" style="width:'+pct+'%"></div></div>'
+                  + '</div>';
+              }).join('')
+            + '</div>'}
+      </div>
+    </div>
+
+    <!-- ── 5. Sync history ─────────────────────────────────── -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Sync History <span class="muted" style="font-size:11px;font-weight:400;margin-left:6px">(\${totalSyncs} run\${totalSyncs!==1?'s':''} this session)</span></h2>
+        <button class="sync-btn" id="sync-btn" onclick="triggerSync()">▶ Run Now</button>
+      </div>
+      \${d.syncHistory.length === 0
+        ? '<div style="padding:18px;color:var(--muted);font-size:13px">No syncs yet this session.</div>'
+        : '<div class="tbl-wrap"><table><thead><tr>'
+            + '<th>Time</th><th>Duration</th><th>OK</th><th>Failed</th><th>Result</th>'
+            + '</tr></thead><tbody>'
+            + [...d.syncHistory].reverse().map(s => {
+                const hasErr = s.failed > 0;
+                const clubs = s.clubs || [];
+                const okClubs = clubs.filter(c=>c.status==='ok');
+                const errClubs = clubs.filter(c=>c.status!=='ok');
+                const clubHtml = okClubs.map(c=>'<span class="club-tag club-tag-ok">'+escHtml(c.name)+'</span>').join('')
+                  + errClubs.map(c=>'<span class="club-tag club-tag-err" title="'+escHtml(c.error||'')+'">⚠ '+escHtml(c.name)+'</span>'
+                      + (c.error ? '<div class="err-detail">'+escHtml(c.error.slice(0,120))+'</div>' : '')).join('');
+                return '<tr class="'+(hasErr?'row-err':'')+'">'
+                  + '<td style="white-space:nowrap">'+fmt(s.completedAt)+'</td>'
+                  + '<td class="muted">'+s.durationMs+'ms</td>'
+                  + '<td class="ok">'+s.succeeded+'</td>'
+                  + '<td class="'+(hasErr?'err':'muted')+'">'+s.failed+'</td>'
+                  + '<td style="min-width:200px">'+clubHtml+'</td>'
+                  + '</tr>';
+              }).join('')
+            + '</tbody></table></div>'}
+    </div>
+  \`;
+  updateUptime();
 }
 
 async function triggerSync() {
@@ -685,13 +857,8 @@ async function triggerSync() {
   }
 }
 
-// Live uptime counter
-setInterval(() => {
-  if (!data) {
-    const el = document.getElementById('uptime');
-    if (el) el.textContent = '';
-    return;
-  }
+function updateUptime() {
+  if (!data) return;
   const s = Math.floor((Date.now() - new Date(data.serverStart)) / 1000);
   const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), sec = s%60;
   const str = (h?h+'h ':'') + (m?m+'m ':'') + sec+'s';
@@ -699,7 +866,9 @@ setInterval(() => {
   const el2 = document.getElementById('uptime-card');
   if (el1) el1.textContent = 'Up ' + str;
   if (el2) el2.textContent = str;
-}, 1000);
+}
+
+setInterval(updateUptime, 1000);
 </script>
 </body>
 </html>`);
@@ -727,6 +896,7 @@ app.post('/auth/request-account', async (req, res) => {
     .insert({ club_name: clubName, contact_email: contactEmail, message: message ?? null });
 
   if (error) return res.status(500).json({ error: error.message });
+  USER_METRICS.accountRequests++;
   res.status(201).json({ status: 'ok' });
 });
 
@@ -878,6 +1048,7 @@ app.patch('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
 
     if (error) throw error;
 
+    USER_METRICS.eventsEdited++;
     clearCacheKey('events:all');
     res.json({
       ...data,
@@ -939,6 +1110,7 @@ app.post('/events', requireAuth, async (req: AuthenticatedRequest, res) => {
 
     if (error) throw error;
 
+    USER_METRICS.eventsCreated++;
     clearCacheKey('events:all');
     res.status(201).json({
       ...data,
@@ -1124,7 +1296,7 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels } = req.body as {
+  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels, meetingSchedule } = req.body as {
     name?: string;
     description?: string;
     instagram?: string;
@@ -1133,6 +1305,7 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     contactEmail?: string;
     outlookLink?: string;
     sectionLabels?: { exec?: string; board?: string; intern?: string };
+    meetingSchedule?: Array<{ day: string; time: string; location: string; notes?: string }> | null;
   };
 
   try {
@@ -1156,11 +1329,12 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       if (!name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
       updates.name = name.trim();
     }
-    if (description !== undefined || sectionLabels !== undefined) {
+    if (description !== undefined || sectionLabels !== undefined || meetingSchedule !== undefined) {
       updates.metadata_tags = {
         ...currentMeta,
         ...(description !== undefined ? { description } : {}),
         ...(sectionLabels !== undefined ? { section_labels: sectionLabels } : {}),
+        ...(meetingSchedule !== undefined ? { meeting_schedule: meetingSchedule ?? null } : {}),
       };
     }
     if (instagram !== undefined || linktree !== undefined || engage !== undefined || contactEmail !== undefined) {
@@ -1692,6 +1866,7 @@ app.get('/events/ics', async (req, res) => {
         console.error(err);
         return res.status(500).send('Error generating ICS');
       }
+      USER_METRICS.icsDownloads++;
       res.setHeader('Content-Type', 'text/calendar');
       res.setHeader('Content-Disposition', 'attachment; filename=custom-schedule.ics');
       res.send(value);
@@ -2023,6 +2198,8 @@ app.patch('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) => 
 
     if (error) throw error;
 
+    if (status === 'accepted') USER_METRICS.collabAccepted++;
+    else if (status === 'rejected') USER_METRICS.collabRejected++;
     clearCacheKey('events:all');
     res.json({ success: true });
   } catch (err: any) {
@@ -2054,7 +2231,7 @@ app.delete('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
 
     const { error } = await supabase
       .from('collaborations')
-      .delete()
+      .update({ manually_removed: true, status: 'rejected' })
       .eq('id', id);
 
     if (error) throw error;

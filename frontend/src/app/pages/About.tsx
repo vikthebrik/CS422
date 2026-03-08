@@ -46,11 +46,69 @@ const SETTINGS_KEY = 'about-page';
 
 const DEFAULT_BLOCKS: Block[] = [
   {
-    id: 'default-intro',
+    id: 'default-hero',
     type: 'text',
-    title: 'About the Multicultural Center',
-    content: 'The Multicultural Center (MCC) at the University of Oregon is a welcoming space for all students — a place to gather, learn, and build community across cultures.\n\nWe celebrate diversity and provide resources, programming, and advocacy to support underrepresented student communities at UO.',
+    style: {
+      backgroundColor: '#154733',
+      textColor: '#FEE123',
+      textAlign: 'center',
+      padding: 'xlarge',
+      borderRadius: 'large',
+      shadow: 'large',
+      useCard: true
+    },
+    title: 'Welcome to the Multicultural Center',
+    content: 'A vibrant hub for undergraduate and graduate students to gather, grow, and lead. Our primary goal is to create a space which promotes student leadership development, cultural pluralism, and positive social change.',
   },
+  {
+    id: 'default-student-run',
+    type: 'text',
+    style: {
+      backgroundColor: '#f2f2f2',
+      textColor: '#1a1a1a',
+      textAlign: 'left',
+      padding: 'large',
+      borderRadius: 'medium',
+      useCard: false
+    },
+    title: 'Run by Students, For Students',
+    content: 'Located in the heart of the EMU, the Multicultural Center is run entirely by student organizations. It is open to all students to find community, learn, and organize.',
+  },
+  {
+    id: 'default-history',
+    type: 'text',
+    style: {
+      backgroundColor: '#1a1a1a',
+      textColor: '#ffffff',
+      padding: 'large',
+      borderRadius: 'large',
+      shadow: 'medium',
+      useCard: true
+    },
+    title: 'A History of Activism',
+    content: 'The MCC was started by student activists. It was originally conceptualized by about a dozen student interns with a collective goal of inclusion, starting as a way to improve campus safety and equity for women of color.\n\nSince its founding, the center has been unyieldingly dedicated to advocating for student rights and social change across the University of Oregon campus.',
+  },
+  {
+    id: 'default-links',
+    type: 'links',
+    style: {
+      padding: 'medium',
+      useCard: false
+    },
+    title: 'Resources & Profiles',
+    links: [
+      { label: 'Dean of Students', url: 'https://dos.uoregon.edu/multicultural-center', description: 'Official UO DOS Page' },
+      { label: 'Instagram', url: 'https://www.instagram.com/uoregonmcc/?hl=en', description: '@uoregonmcc' },
+      { label: 'Daily Emerald Guide', url: 'https://dailyemerald.com/177117/arts-culture/a-guide-to-uos-multicultural-center/', description: 'Feature article' }
+    ],
+  },
+  {
+    id: 'default-clubs',
+    type: 'clubs',
+    style: { padding: 'medium', useCard: false },
+    title: 'Our Affiliated Organizations',
+    clubIds: [],
+  }
 ];
 
 const BLOCK_META = [
@@ -65,11 +123,12 @@ function genId() {
 }
 
 function makeDefaultBlock(type: Block['type']): Block {
+  const base = { id: genId(), style: { padding: 'medium', useCard: false } as const };
   switch (type) {
-    case 'text': return { id: genId(), type: 'text', title: '', content: '' };
-    case 'media': return { id: genId(), type: 'media', mediaType: 'image', url: '', caption: '' };
-    case 'links': return { id: genId(), type: 'links', title: '', links: [{ label: '', url: '', description: '' }] };
-    case 'clubs': return { id: genId(), type: 'clubs', title: '', clubIds: [] };
+    case 'text': return { ...base, type: 'text', title: '', content: '' };
+    case 'media': return { ...base, type: 'media', mediaType: 'image', url: '', caption: '' };
+    case 'links': return { ...base, type: 'links', title: '', links: [{ label: '', url: '', description: '' }] };
+    case 'clubs': return { ...base, type: 'clubs', title: '', clubIds: [] };
   }
 }
 
@@ -78,12 +137,13 @@ function makeDefaultBlock(type: Block['type']): Block {
 // ---------------------------------------------------------------------------
 
 function TextRenderer({ block }: { block: TextBlock }) {
+  const customColor = !!block.style?.textColor;
   return (
     <div className="space-y-4">
       {block.title && (
-        <h2 className="text-3xl font-semibold tracking-tight">{block.title}</h2>
+        <h2 className={`text-3xl font-semibold tracking-tight ${customColor ? '' : 'text-foreground'}`}>{block.title}</h2>
       )}
-      <div className="text-muted-foreground leading-relaxed space-y-4">
+      <div className={`leading-relaxed space-y-4 ${customColor ? '' : 'text-muted-foreground'}`}>
         {block.content.split('\n\n').map((para, i) => (
           <p key={i}>{para}</p>
         ))}
@@ -101,7 +161,7 @@ function MediaRenderer({ block }: { block: MediaBlock }) {
     );
   }
   return (
-    <div className="relative rounded-xl overflow-hidden">
+    <div className="relative rounded-xl overflow-hidden shadow-sm">
       {block.mediaType === 'video' ? (
         <video src={block.url} controls className="w-full max-h-[480px] object-cover" />
       ) : (
@@ -118,9 +178,10 @@ function MediaRenderer({ block }: { block: MediaBlock }) {
 
 function LinksRenderer({ block }: { block: LinkContainerBlock }) {
   const validLinks = block.links.filter(l => l.label || l.url);
+  const customColor = !!block.style?.textColor;
   return (
     <div className="space-y-4">
-      {block.title && <h2 className="text-2xl font-semibold tracking-tight">{block.title}</h2>}
+      {block.title && <h2 className={`text-2xl font-semibold tracking-tight ${customColor ? '' : 'text-foreground'}`}>{block.title}</h2>}
       <div className="grid gap-3 sm:grid-cols-2">
         {validLinks.map((link, i) => (
           <a
@@ -128,13 +189,13 @@ function LinksRenderer({ block }: { block: LinkContainerBlock }) {
             href={link.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-start gap-3 p-4 rounded-xl border border-border hover:bg-accent/50 transition-colors group"
+            className={`flex items-start gap-3 p-4 rounded-xl border hover:bg-black/5 dark:hover:bg-white/5 transition-colors group ${customColor ? 'border-current/20' : 'border-border'}`}
           >
-            <ExternalLink className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+            <ExternalLink className={`h-4 w-4 mt-0.5 shrink-0 ${customColor ? 'opacity-70' : 'text-muted-foreground group-hover:text-primary transition-colors'}`} />
             <div>
               <p className="font-medium">{link.label}</p>
               {link.description && (
-                <p className="text-sm text-muted-foreground mt-0.5">{link.description}</p>
+                <p className={`text-sm mt-0.5 ${customColor ? 'opacity-80' : 'text-muted-foreground'}`}>{link.description}</p>
               )}
             </div>
           </a>
@@ -146,18 +207,19 @@ function LinksRenderer({ block }: { block: LinkContainerBlock }) {
 
 function ClubsRenderer({ block, clubs }: { block: ClubShowcaseBlock; clubs: ReturnType<typeof useApp>['clubs'] }) {
   const featured = clubs.filter(c => block.clubIds.includes(c.id));
+  const customColor = !!block.style?.textColor;
   return (
     <div className="space-y-4">
-      {block.title && <h2 className="text-2xl font-semibold tracking-tight">{block.title}</h2>}
+      {block.title && <h2 className={`text-2xl font-semibold tracking-tight ${customColor ? '' : 'text-foreground'}`}>{block.title}</h2>}
       {featured.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No organizations selected.</p>
+        <p className={`text-sm ${customColor ? 'opacity-80' : 'text-muted-foreground'}`}>No organizations selected.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map(club => (
             <Link
               key={club.id}
               to={`/club/${club.id}`}
-              className="flex items-center gap-3 p-4 rounded-xl border border-border hover:bg-accent/50 transition-colors"
+              className={`flex items-center gap-3 p-4 rounded-xl border hover:bg-black/5 dark:hover:bg-white/5 transition-colors ${customColor ? 'border-current/20' : 'border-border'}`}
             >
               {club.logo ? (
                 <ImageWithFallback
@@ -175,7 +237,7 @@ function ClubsRenderer({ block, clubs }: { block: ClubShowcaseBlock; clubs: Retu
               )}
               <div className="min-w-0">
                 <p className="font-medium truncate">{club.name}</p>
-                <p className="text-xs text-muted-foreground capitalize">
+                <p className={`text-xs capitalize ${customColor ? 'opacity-80' : 'text-muted-foreground'}`}>
                   {club.orgType === 'department' ? 'Department' : 'Student Union'}
                 </p>
               </div>
@@ -187,7 +249,7 @@ function ClubsRenderer({ block, clubs }: { block: ClubShowcaseBlock; clubs: Retu
   );
 }
 
-function BlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeof useApp>['clubs'] }) {
+function InnerBlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeof useApp>['clubs'] }) {
   switch (block.type) {
     case 'text': return <TextRenderer block={block} />;
     case 'media': return <MediaRenderer block={block} />;
@@ -196,9 +258,110 @@ function BlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeo
   }
 }
 
+function BlockRenderer({ block, clubs }: { block: Block; clubs: ReturnType<typeof useApp>['clubs'] }) {
+  const s = block.style || {};
+  const alignClass = s.textAlign === 'center' ? 'text-center' : s.textAlign === 'right' ? 'text-right' : s.textAlign === 'justify' ? 'text-justify' : 'text-left';
+  const padClass = s.padding === 'none' ? 'p-0' : s.padding === 'small' ? 'p-4' : s.padding === 'medium' ? 'p-8' : s.padding === 'large' ? 'p-12' : s.padding === 'xlarge' ? 'p-16 sm:p-24' : 'p-0';
+  const roundedClass = s.borderRadius === 'none' ? 'rounded-none' : s.borderRadius === 'small' ? 'rounded-md' : s.borderRadius === 'large' ? 'rounded-2xl' : s.borderRadius === 'full' ? 'rounded-[2rem]' : s.borderRadius === 'medium' ? 'rounded-xl' : (s.useCard !== false ? 'rounded-xl sm:rounded-2xl' : '');
+  const shadowClass = s.shadow === 'none' ? 'shadow-none' : s.shadow === 'small' ? 'shadow-sm' : s.shadow === 'medium' ? 'shadow-md' : s.shadow === 'large' ? 'shadow-xl' : (s.useCard !== false ? 'shadow-sm' : 'shadow-none');
+  const cardClass = s.useCard !== false || s.borderColor ? 'border' : '';
+
+  const inlineStyles: React.CSSProperties = {
+    backgroundColor: s.backgroundColor || 'transparent',
+    color: s.textColor || 'inherit',
+    borderColor: s.borderColor || (s.useCard !== false ? 'var(--border)' : 'transparent'),
+  };
+
+  return (
+    <div
+      className={`relative w-full overflow-hidden ${alignClass} ${padClass} ${roundedClass} ${cardClass} ${shadowClass} transition-all duration-300`}
+      style={inlineStyles}
+    >
+      <InnerBlockRenderer block={block} clubs={clubs} />
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Block editor form (inside Dialog)
 // ---------------------------------------------------------------------------
+
+function BlockStyleForm({ style, onChange }: { style?: Block['style'], onChange: (s: Block['style']) => void }) {
+  const s = style || {};
+  return (
+    <div className="space-y-4 p-4 border border-border rounded-lg bg-muted/20 mt-6">
+      <h3 className="text-sm font-medium flex items-center gap-2">
+        <Settings className="w-4 h-4" />
+        Appearance Settings
+      </h3>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <Label className="text-xs">Background Color (e.g. #fcd34d)</Label>
+          <div className="flex gap-2">
+            <Input type="color" className="h-9 w-12 p-1 shrink-0" value={s.backgroundColor || '#ffffff'} onChange={e => onChange({ ...s, backgroundColor: e.target.value })} />
+            <Input type="text" className="h-9 font-mono text-sm" value={s.backgroundColor || ''} onChange={e => onChange({ ...s, backgroundColor: e.target.value })} placeholder="transparent" />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Text Color (e.g. #78350f)</Label>
+          <div className="flex gap-2">
+            <Input type="color" className="h-9 w-12 p-1 shrink-0" value={s.textColor || '#000000'} onChange={e => onChange({ ...s, textColor: e.target.value })} />
+            <Input type="text" className="h-9 font-mono text-sm" value={s.textColor || ''} onChange={e => onChange({ ...s, textColor: e.target.value })} placeholder="inherit" />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Border Color (e.g. #e5e7eb)</Label>
+          <div className="flex gap-2">
+            <Input type="color" className="h-9 w-12 p-1 shrink-0" value={s.borderColor || '#ffffff'} onChange={e => onChange({ ...s, borderColor: e.target.value })} />
+            <Input type="text" className="h-9 font-mono text-sm" value={s.borderColor || ''} onChange={e => onChange({ ...s, borderColor: e.target.value })} placeholder="default" />
+          </div>
+        </div>
+        <div>
+          <Label className="text-xs">Text Alignment</Label>
+          <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1" value={s.textAlign || 'left'} onChange={e => onChange({ ...s, textAlign: e.target.value as any })}>
+            <option value="left">Left</option>
+            <option value="center">Center</option>
+            <option value="right">Right</option>
+            <option value="justify">Justify</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Padding</Label>
+          <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1" value={s.padding || 'none'} onChange={e => onChange({ ...s, padding: e.target.value as any })}>
+            <option value="none">None</option>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+            <option value="xlarge">Extra Large</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Rounded Corners</Label>
+          <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1" value={s.borderRadius || 'medium'} onChange={e => onChange({ ...s, borderRadius: e.target.value as any })}>
+            <option value="none">Sharp (None)</option>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+            <option value="full">Pill (Full)</option>
+          </select>
+        </div>
+        <div>
+          <Label className="text-xs">Drop Shadow</Label>
+          <select className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring mt-1" value={s.shadow || 'small'} onChange={e => onChange({ ...s, shadow: e.target.value as any })}>
+            <option value="none">None</option>
+            <option value="small">Small</option>
+            <option value="medium">Medium</option>
+            <option value="large">Large</option>
+          </select>
+        </div>
+        <div className="flex items-center gap-2 mt-6">
+          <input type="checkbox" id="useCard" className="rounded" checked={s.useCard !== false} onChange={e => onChange({ ...s, useCard: e.target.checked })} />
+          <Label htmlFor="useCard" className="text-sm cursor-pointer">Display as Card</Label>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Scales an image down client-side using a canvas.
@@ -287,220 +450,228 @@ function BlockEditForm({
     finally { setUploading(false); }
   };
 
-  if (draft.type === 'text') {
-    return (
-      <div className="space-y-4">
-        <div>
-          <Label>Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
-          <Input
-            className="mt-1"
-            value={draft.title ?? ''}
-            onChange={e => onChange({ ...draft, title: e.target.value })}
-            placeholder="Section title…"
-          />
-        </div>
-        <div>
-          <Label>Content</Label>
-          <Textarea
-            className="mt-1 min-h-[180px]"
-            value={draft.content}
-            onChange={e => onChange({ ...draft, content: e.target.value })}
-            placeholder="Write your content here. Separate paragraphs with a blank line."
-          />
-          <p className="text-xs text-muted-foreground mt-1">Use blank lines between paragraphs.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (draft.type === 'media') {
-    return (
-      <div className="space-y-4">
-        <div>
-          <Label>Media Type</Label>
-          <div className="flex gap-2 mt-1">
-            {(['image', 'video'] as const).map(t => (
-              <Button
-                key={t}
-                type="button"
-                size="sm"
-                variant={draft.mediaType === t ? 'default' : 'outline'}
-                onClick={() => onChange({ ...draft, mediaType: t })}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </Button>
-            ))}
+  const renderFields = () => {
+    if (draft.type === 'text') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Input
+              className="mt-1"
+              value={draft.title ?? ''}
+              onChange={e => onChange({ ...draft, title: e.target.value })}
+              placeholder="Section title…"
+            />
+          </div>
+          <div>
+            <Label>Content</Label>
+            <Textarea
+              className="mt-1 min-h-[180px]"
+              value={draft.content}
+              onChange={e => onChange({ ...draft, content: e.target.value })}
+              placeholder="Write your content here. Separate paragraphs with a blank line."
+            />
+            <p className="text-xs text-muted-foreground mt-1">Use blank lines between paragraphs.</p>
           </div>
         </div>
+      );
+    }
 
-        {draft.mediaType === 'image' ? (
-          <div className="space-y-3">
-            {(preview ?? draft.url) && (
-              <img
-                src={preview ?? draft.url}
-                alt="Preview"
-                className="w-full h-36 object-cover rounded-lg border border-border"
-              />
-            )}
-            {preview ? (
-              <Button size="sm" onClick={handleUpload} disabled={uploading}>
-                {uploading
-                  ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Uploading…</>
-                  : <><Upload className="h-3.5 w-3.5 mr-1.5" />Upload Image</>}
-              </Button>
-            ) : (
-              <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
-                <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
-                Choose Image
-              </Button>
-            )}
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+    if (draft.type === 'media') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>Media Type</Label>
+            <div className="flex gap-2 mt-1">
+              {(['image', 'video'] as const).map(t => (
+                <Button
+                  key={t}
+                  type="button"
+                  size="sm"
+                  variant={draft.mediaType === t ? 'default' : 'outline'}
+                  onClick={() => onChange({ ...draft, mediaType: t })}
+                >
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {draft.mediaType === 'image' ? (
+            <div className="space-y-3">
+              {(preview ?? draft.url) && (
+                <img
+                  src={preview ?? draft.url}
+                  alt="Preview"
+                  className="w-full h-36 object-cover rounded-lg border border-border"
+                />
+              )}
+              {preview ? (
+                <Button size="sm" onClick={handleUpload} disabled={uploading}>
+                  {uploading
+                    ? <><RefreshCw className="h-3.5 w-3.5 mr-1.5 animate-spin" />Uploading…</>
+                    : <><Upload className="h-3.5 w-3.5 mr-1.5" />Upload Image</>}
+                </Button>
+              ) : (
+                <Button type="button" size="sm" variant="outline" onClick={() => fileRef.current?.click()}>
+                  <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Choose Image
+                </Button>
+              )}
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
+              <div>
+                <Label>Or paste an image URL</Label>
+                <Input
+                  className="mt-1"
+                  value={draft.url}
+                  onChange={e => onChange({ ...draft, url: e.target.value })}
+                  placeholder="https://…"
+                />
+              </div>
+            </div>
+          ) : (
             <div>
-              <Label>Or paste an image URL</Label>
+              <Label>Video URL</Label>
               <Input
                 className="mt-1"
                 value={draft.url}
                 onChange={e => onChange({ ...draft, url: e.target.value })}
-                placeholder="https://…"
+                placeholder="https://… (direct .mp4 or video link)"
               />
             </div>
-          </div>
-        ) : (
+          )}
+
           <div>
-            <Label>Video URL</Label>
+            <Label>Caption <span className="text-muted-foreground text-xs">(optional)</span></Label>
             <Input
               className="mt-1"
-              value={draft.url}
-              onChange={e => onChange({ ...draft, url: e.target.value })}
-              placeholder="https://… (direct .mp4 or video link)"
+              value={draft.caption ?? ''}
+              onChange={e => onChange({ ...draft, caption: e.target.value })}
+              placeholder="Short caption shown below the media…"
             />
           </div>
-        )}
-
-        <div>
-          <Label>Caption <span className="text-muted-foreground text-xs">(optional)</span></Label>
-          <Input
-            className="mt-1"
-            value={draft.caption ?? ''}
-            onChange={e => onChange({ ...draft, caption: e.target.value })}
-            placeholder="Short caption shown below the media…"
-          />
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  if (draft.type === 'links') {
-    const setLinks = (links: LinkItem[]) => onChange({ ...draft, links });
-    return (
-      <div className="space-y-4">
-        <div>
-          <Label>Section Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
-          <Input
-            className="mt-1"
-            value={draft.title ?? ''}
-            onChange={e => onChange({ ...draft, title: e.target.value })}
-            placeholder="e.g. Sister Cultural Departments"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Links</Label>
-          <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-            {draft.links.map((link, i) => (
-              <div key={i} className="rounded-lg border border-border p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">Link {i + 1}</span>
-                  <Button
-                    size="sm" variant="ghost"
-                    onClick={() => setLinks(draft.links.filter((_, j) => j !== i))}
-                    className="h-6 w-6 p-0"
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
-                </div>
-                <Input
-                  placeholder="Label"
-                  value={link.label}
-                  onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], label: e.target.value }; setLinks(l); }}
-                />
-                <Input
-                  placeholder="URL (https://…)"
-                  value={link.url}
-                  onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], url: e.target.value }; setLinks(l); }}
-                />
-                <Input
-                  placeholder="Description (optional)"
-                  value={link.description ?? ''}
-                  onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], description: e.target.value }; setLinks(l); }}
-                />
-              </div>
-            ))}
+    if (draft.type === 'links') {
+      const setLinks = (links: LinkItem[]) => onChange({ ...draft, links });
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>Section Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Input
+              className="mt-1"
+              value={draft.title ?? ''}
+              onChange={e => onChange({ ...draft, title: e.target.value })}
+              placeholder="e.g. Sister Cultural Departments"
+            />
           </div>
-          <Button
-            type="button" size="sm" variant="outline"
-            onClick={() => setLinks([...draft.links, { label: '', url: '', description: '' }])}
-          >
-            <Plus className="h-3 w-3 mr-1" />Add Link
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // clubs
-  if (draft.type === 'clubs') {
-    return (
-      <div className="space-y-4">
-        <div>
-          <Label>Section Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
-          <Input
-            className="mt-1"
-            value={draft.title ?? ''}
-            onChange={e => onChange({ ...draft, title: e.target.value })}
-            placeholder="e.g. Our Affiliated Organizations"
-          />
-        </div>
-        <div>
-          <Label>Select Organizations</Label>
-          <div className="mt-2 border border-border rounded-lg divide-y divide-border max-h-64 overflow-y-auto">
-            {clubs.map(club => {
-              const selected = draft.clubIds.includes(club.id);
-              return (
-                <label
-                  key={club.id}
-                  className="flex items-center gap-3 px-3 py-2 hover:bg-accent/40 cursor-pointer"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selected}
-                    onChange={() =>
-                      onChange({
-                        ...draft,
-                        clubIds: selected
-                          ? draft.clubIds.filter(id => id !== club.id)
-                          : [...draft.clubIds, club.id],
-                      })
-                    }
-                    className="rounded"
-                  />
-                  <div
-                    className="w-7 h-7 rounded flex items-center justify-center text-white text-xs font-medium shrink-0"
-                    style={{ backgroundColor: club.color }}
-                  >
-                    {club.name.substring(0, 2)}
+          <div className="space-y-2">
+            <Label>Links</Label>
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              {draft.links.map((link, i) => (
+                <div key={i} className="rounded-lg border border-border p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-muted-foreground">Link {i + 1}</span>
+                    <Button
+                      size="sm" variant="ghost"
+                      onClick={() => setLinks(draft.links.filter((_, j) => j !== i))}
+                      className="h-6 w-6 p-0"
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
                   </div>
-                  <span className="text-sm">{club.name}</span>
-                </label>
-              );
-            })}
+                  <Input
+                    placeholder="Label"
+                    value={link.label}
+                    onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], label: e.target.value }; setLinks(l); }}
+                  />
+                  <Input
+                    placeholder="URL (https://…)"
+                    value={link.url}
+                    onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], url: e.target.value }; setLinks(l); }}
+                  />
+                  <Input
+                    placeholder="Description (optional)"
+                    value={link.description ?? ''}
+                    onChange={e => { const l = [...draft.links]; l[i] = { ...l[i], description: e.target.value }; setLinks(l); }}
+                  />
+                </div>
+              ))}
+            </div>
+            <Button
+              type="button" size="sm" variant="outline"
+              onClick={() => setLinks([...draft.links, { label: '', url: '', description: '' }])}
+            >
+              <Plus className="h-3 w-3 mr-1" />Add Link
+            </Button>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">{draft.clubIds.length} selected</p>
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  return null;
+    if (draft.type === 'clubs') {
+      return (
+        <div className="space-y-4">
+          <div>
+            <Label>Section Title <span className="text-muted-foreground text-xs">(optional)</span></Label>
+            <Input
+              className="mt-1"
+              value={draft.title ?? ''}
+              onChange={e => onChange({ ...draft, title: e.target.value })}
+              placeholder="e.g. Our Affiliated Organizations"
+            />
+          </div>
+          <div>
+            <Label>Select Organizations</Label>
+            <div className="mt-2 border border-border rounded-lg divide-y divide-border max-h-64 overflow-y-auto">
+              {clubs.map(club => {
+                const selected = draft.clubIds.includes(club.id);
+                return (
+                  <label
+                    key={club.id}
+                    className="flex items-center gap-3 px-3 py-2 hover:bg-accent/40 cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() =>
+                        onChange({
+                          ...draft,
+                          clubIds: selected
+                            ? draft.clubIds.filter(id => id !== club.id)
+                            : [...draft.clubIds, club.id],
+                        })
+                      }
+                      className="rounded"
+                    />
+                    <div
+                      className="w-7 h-7 rounded flex items-center justify-center text-white text-xs font-medium shrink-0"
+                      style={{ backgroundColor: club.color }}
+                    >
+                      {club.name.substring(0, 2)}
+                    </div>
+                    <span className="text-sm">{club.name}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{draft.clubIds.length} selected</p>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="flex flex-col">
+      {renderFields()}
+      <BlockStyleForm style={draft.style} onChange={style => onChange({ ...draft, style })} />
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

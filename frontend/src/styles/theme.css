@@ -55,19 +55,23 @@
   --font-display: ui-sans-serif, system-ui, sans-serif;
   --font-body: ui-sans-serif, system-ui, sans-serif;
 
+  /* UO Brand Colors */
+  --uo-green: #004F35;
+  --uo-gold: #FEE123;
+
   --background: #f5f5f5;
   --foreground: oklch(0.145 0 0);
   --card: #ffffff;
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: #004F35;
+  --primary: var(--uo-green);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.95 0.0058 264.53);
   --secondary-foreground: #030213;
   --muted: #ececf0;
   --muted-foreground: #717182;
-  --accent: #FEE123;
+  --accent: var(--uo-gold);
   --accent-foreground: #004F35;
   --destructive: #d4183d;
   --destructive-foreground: #ffffff;

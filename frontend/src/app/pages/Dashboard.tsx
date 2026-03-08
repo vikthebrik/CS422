@@ -30,6 +30,7 @@ import { useState, useMemo } from 'react';
 import { CalendarGrid } from '../components/CalendarGrid';
 import { EventDetailModal } from '../components/EventDetailModal';
 import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
 import { Event } from '../types';
 import { useApp } from '../context/AppContext';
 
@@ -60,8 +61,19 @@ export function Dashboard() {
 
     if (advancedMode) {
       filtered = filtered.filter(event => {
-        const types = perClubEventTypes[event.clubId] ?? eventTypeNames;
-        return types.includes(event.eventType);
+        const collabClubIds = (event.collaborators ?? []).map(c => c.club_id);
+        const eventClubs = [event.clubId, ...collabClubIds];
+
+        // Only care about clubs that are actually selected in the frontend
+        const relevantClubs = eventClubs.filter(cid =>
+          selectedClubs.length === 0 || selectedClubs.includes(cid)
+        );
+
+        // Does ANY relevant club have this event's type enabled?
+        return relevantClubs.some(cid => {
+          const types = perClubEventTypes[cid] ?? eventTypeNames;
+          return types.includes(event.eventType);
+        });
       });
     } else if (selectedEventTypes.length > 0) {
       filtered = filtered.filter(event => selectedEventTypes.includes(event.eventType));
@@ -96,14 +108,7 @@ export function Dashboard() {
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center py-24 text-destructive">
-        <div className="text-center space-y-2">
-          <p className="font-medium">Failed to load data</p>
-          <p className="text-sm text-muted-foreground">{error}</p>
-        </div>
-      </div>
-    );
+    return <ErrorState title="Failed to load events" message={error} />;
   }
 
   return (

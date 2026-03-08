@@ -151,26 +151,21 @@ export async function populate(clubName: string, icsUrl: string) {
             const titleText = title.toLowerCase();
             const descText = desc.toLowerCase();
 
-            // Ticket/RSVP detection — do NOT trigger on Teams URLs alone
+            // Ticket/RSVP detection
             const hasTicketTag =
                 titleText.includes('[t]') || titleText.includes('[ticket]') ||
                 descText.includes('[t]') || descText.includes('[ticket]');
             const hasTicketWord = /\btickets?\b/.test(descText);
             const hasRsvpWord = descText.includes('rsvp') || descText.includes('register');
 
-            // Make sure a Teams-only URL doesn't falsely trigger ticket detection
-            const cleanedForCheck = cleanDescription(desc).toLowerCase();
-            const required =
-                hasTicketTag ||
-                (hasTicketWord && !cleanedForCheck.includes('teams')) ||
-                hasRsvpWord;
+            const required = hasTicketTag || hasTicketWord || hasRsvpWord;
 
             let link = null;
             if (required) {
                 // Prefer non-Teams URLs as the RSVP link
                 const urlRegex = /(https?:\/\/[^\s<>"]+)/g;
                 const matches = [...desc.matchAll(urlRegex)].map(m => m[1]);
-                link = matches.find(u => !u.includes('teams.microsoft.com')) ?? matches[0] ?? null;
+                link = matches.find(u => !u.includes('teams.microsoft.com')) ?? null;
             }
             return { required, link };
         };
@@ -191,12 +186,17 @@ export async function populate(clubName: string, icsUrl: string) {
                         continue;
                     }
 
-                    const title = event.summary || 'Untitled Event';
+                    const rawTitle = event.summary || 'Untitled Event';
+                    // Strip all known MCC shortcode tags from anywhere in the title
+                    // (they may appear at start, end, or multiple times)
+                    const title = rawTitle
+                      .replace(/\[(?:e|event|m|meeting|oh|office\s*hours|o|other|t|ticket)\]\s*/gi, '')
+                      .trim();
                     const rawDescription = event.description || '';
                     const description = cleanDescription(rawDescription);
                     const location = event.location || '';
-                    const typeId = classifyEvent(title, description);
-                    const rsvpInfo = checkRsvp(title, description);
+                    const typeId = classifyEvent(rawTitle, description);
+                    const rsvpInfo = checkRsvp(rawTitle, description);
                     const uid = event.uid; // ICS UID
 
                     processedUids.push(uid);

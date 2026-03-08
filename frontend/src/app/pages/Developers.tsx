@@ -22,14 +22,14 @@ const DEVELOPERS = [
     role: 'Lead Full-Stack Developer',
     email: '',
     github: 'https://github.com/vikthebrik',
-    bio: 'Led end-to-end architecture design, Express REST API, ICS sync pipeline, Supabase auth & storage integration, and full frontend build.',
+    bio: 'Led end-to-end architecture design, database modeling, and domain deployment. Managed user/stakeholder communication and debugging. Built the Express REST API, ICS sync pipeline, Supabase auth & PostgreSQL integration, email automation, and full frontend build.',
   },
   {
     name: 'Maddie',
     role: 'Frontend Developer & UI Design',
     email: '',
     github: 'https://github.com/madelineluu',
-    bio: 'Contributed to frontend component design, UI/UX layout decisions, and user-facing feature development across the React SPA.',
+    bio: 'Contributed to front end design and testing, server hosting, backend logic and caching, UI/UX layout decisions, and user-facing feature development across the React SPA.',
   },
   {
     name: 'Rayna',
@@ -39,7 +39,7 @@ const DEVELOPERS = [
     bio: 'Contributed to frontend development, cross-browser testing, and ensuring a consistent user experience across the application.',
   },
   {
-    name: 'Eirann',
+    name: 'Eireann',
     role: 'Frontend Developer & Documentation',
     email: '',
     github: 'https://github.com/EireannCoelho',
@@ -89,45 +89,47 @@ const USE_STEPS = [
 const OUTLOOK_STEPS = [
   {
     step: '1',
-    title: "Get your Outlook calendar's ICS feed URL",
-    desc: "In Microsoft 365, open your club's group calendar → Settings → Shared calendars → Publish a calendar → set 'Can view all details' → copy the ICS link. It looks like: https://outlook.office365.com/owa/calendar/.../calendar.ics",
+    title: "Find your club calendar's sharing link in Outlook",
+    desc: "Open Outlook on the web (outlook.office365.com) and go to your club's group calendar.Click the Settings gear → \"Shared calendars\" → \"Publish a calendar.\" Choose your calendar, set the permission to \"Can view all details,\" then click Publish and copy the link that appears — it will end in .ics.",
   },
   {
     step: '2',
-    title: 'Paste the ICS link into your club profile',
-    desc: "Log in as your club's officer → go to your club page → click 'Edit Organization Info' → paste the URL into the 'Outlook Calendar ICS URL' field → Save. Your events will start appearing on the site within 14 minutes.",
+    title: "Connect the link to your club profile — one time only",
+    desc: "Sign in to the MCC Calendar Hub → navigate to your club's page → click \"Edit Organization Info\" → paste the link into the \"Outlook Calendar ICS URL\" field → Save.That's it. You only have to do this once, and your events will begin appearing on the site automatically within 15 minutes.",
   },
   {
     step: '3',
-    title: 'Update the link any time you need to',
-    desc: "If your calendar URL ever changes (e.g. after a calendar refresh or org handoff), open the same edit modal on your club page and paste the new URL. You don't need to contact the MCC admin — you own this field.",
+    title: "Create events in Outlook — the site handles the rest",
+    desc: "From this point on, just create events in your club's group calendar in Outlook the same way you always have.The MCC Calendar Hub checks your calendar every 15 minutes and pulls in any new or updated events automatically — no manual entry needed on the site.",
+    note: "Keep in mind: Microsoft's own systems can take 2 to 12 hours to make a brand- new calendar link visible to outside tools.If your events don't show up right away after the initial setup, this is normal — they will appear once Microsoft finishes publishing your calendar.",
   },
   {
     step: '4',
-    title: 'Add events in Outlook — they appear automatically',
-    desc: "Create events in your club's Microsoft 365 group calendar in Outlook. The site fetches new events every 14 minutes automatically — no manual entry needed on the site.",
+    title: "Label your events so students can filter them",
+    desc: "Put a short tag at the very start of the event title to tell the site what kind of event it is. The tag is hidden from students — they only see the clean title. Without a tag, the event is filed under \"Other.\"",
   },
   {
     step: '5',
-    title: 'Tag event titles to control the event type',
-    desc: "Start your Outlook event title with a short tag to control how it appears on the site. Without a tag it defaults to 'Other'. See the full tagging guide below.",
+    title: "Add an RSVP or tickets notice when sign-up is required",
+    desc: "If students need to register or buy tickets, include the word \"RSVP,\" \"Tickets,\" or \"Register\" anywhere in the title or description. The site will automatically show a Tickets / RSVP button on the event. You can also add or update the RSVP link directly on the event page after logging in — useful when registration details aren't ready yet.",
   },
   {
     step: '6',
-    title: 'Mark ticket or RSVP events',
-    desc: "Add [T] or [Ticket] to the start of the title, or include 'tickets', 'rsvp', or 'register' in the title or description. The site will automatically show an RSVP badge on that event.",
+    title: "Edit events on the site when you need more control",
+    desc: "Log in → open the event page → click Edit to change the title, description, location, or event type directly on the site. Once you do this, the event is \"locked\" — future Outlook syncs won't touch it, so your manual edits are safe.\n\nIf you later want Outlook to take over again(for example, because you're updating the event there), click \"Resume Auto-Sync\" on the amber notice at the top of the event page.",
   },
   {
     step: '7',
-    title: 'Editing events on the site vs. in Outlook',
-    desc: "You can edit an event's title, description, location, or type directly on the site (log in → Event Page → Edit). After you do, that event is 'frozen' — future Outlook syncs won't overwrite your changes.\n\nTo hand control back to Outlook, click 'Resume Auto-Sync' on the amber banner at the top of the event page.",
+    title: "Update your sharing link if it ever changes",
+    desc: "If your Outlook calendar link ever stops working — for example after an org leadership handoff or a calendar reset — just paste the new link in the same \"Edit Organization Info\" field on your club page. No need to contact the MCC admin.",
   },
   {
     step: '8',
-    title: 'Collaborating with other clubs',
-    desc: 'Invite members of another MCC club to your Outlook event as attendees and the sync auto-creates a collaboration request for that club. Once they accept, their club badge appears on the event. You can also add/remove collaborators manually from the event page.',
+    title: "Co-host events with other MCC clubs",
+    desc: "To show another club as a collaborator on your event, invite one of their members as an attendee in Outlook. The site will automatically create a collaboration request for that club. Once they accept, their club's badge appears on the event listing.You can also add or remove collaborators manually from the event page at any time.",
   },
 ];
+
 
 export function Developers() {
   return (
@@ -145,14 +147,27 @@ export function Developers() {
                 University of Oregon
               </span>
             </div>
-            <h1 className="text-3xl font-bold tracking-tight mt-2">MCC Calendar Hub</h1>
+            <h1 className="text-3xl font-bold tracking-tight mt-2">Usage Guide</h1>
             <p className="text-muted-foreground mt-2 max-w-xl">
-              A web-based calendar aggregator for the UO Multicultural Center. Pulls Outlook
-              ICS feeds from every MCC student organization and serves a unified, filterable
-              event calendar with club management, RSVP tracking, and collaboration tools.
+              Everything you need to get the most out of the MCC Calendar Hub — whether you're
+              a student browsing events or a club officer managing your organization's calendar.
             </p>
           </div>
           <div className="flex flex-col gap-2 shrink-0">
+            <a
+              href="#how-to-use"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors text-sm font-medium text-emerald-800 dark:text-emerald-300"
+            >
+              <Calendar className="h-4 w-4" />
+              How to Use the Site
+            </a>
+            <a
+              href="#club-admin"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors text-sm font-medium text-blue-800 dark:text-blue-300"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Manage as a Club Admin
+            </a>
             <a
               href={GITHUB_REPO}
               target="_blank"
@@ -233,12 +248,12 @@ export function Developers() {
       </section>
 
       {/* ── How to Use the Site ───────────────────────────────────── */}
-      <section>
+      <section id="how-to-use" className="scroll-mt-24">
         <h2 className="text-xl font-semibold mb-1 flex items-center gap-2">
           <Calendar className="h-5 w-5 text-primary" />
           How to Use the Site
         </h2>
-        <p className="text-sm text-muted-foreground mb-4">Step-by-step guide for visitors and club officers.</p>
+        <p className="text-sm text-muted-foreground mb-4">Step-by-step general usage guide for visitors on how to maximize the site's potential.</p>
         <div className="space-y-3">
           {USE_STEPS.map(({ step, title, desc }) => (
             <div key={step} className="flex gap-4 rounded-lg border border-border bg-card p-4">
@@ -255,16 +270,19 @@ export function Developers() {
       </section>
 
       {/* ── How to Sync Outlook ───────────────────────────────────── */}
-      <section>
+      <section id="club-admin" className="scroll-mt-24">
         <h2 className="text-xl font-semibold mb-1 flex items-center gap-2">
           <RefreshCw className="h-5 w-5 text-primary" />
-          How to Sync Your Outlook Calendar
+          How to Manage Page as Club Admin
         </h2>
         <p className="text-sm text-muted-foreground mb-1">
-          For club officers — how to get your Outlook events onto the MCC Calendar Hub automatically.
+          A step-by-step guide on connecting and organizing your events on the Hub.
         </p>
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+        <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
           <strong>Note:</strong> You need a club officer login to update your ICS URL. Contact the MCC admin if you do not yet have an account — once you do, the calendar link is entirely self-service.
+        </div>
+        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 px-4 py-3 text-sm text-blue-800 dark:text-blue-300 space-y-1">
+          <p><strong>Sync timing:</strong> The MCC Calendar Hub refreshes your Outlook ICS feed every <strong>15 minutes</strong>. However, Microsoft Outlook and UO Microsoft calendars can take <strong>2 to 12 hours</strong> to propagate changes within their own systems before the updated feed is visible to external services like this one. If your event doesn't appear immediately, this is usually why — just wait a bit and it will sync automatically.</p>
         </div>
         <div className="space-y-3">
           {OUTLOOK_STEPS.slice(0, 5).map(({ step, title, desc }) => (
@@ -291,172 +309,124 @@ export function Developers() {
             — and how to make your events as useful as possible for students.
           </p>
 
-        {/* ── Event type buckets ── */}
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="font-semibold mb-1 flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 text-primary" />
-              How events are sorted into type buckets
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              The sync engine reads the <strong>title</strong> and <strong>description</strong> of each Outlook event
-              and assigns it an event type. Prefix the title with the matching tag — the tag is stripped from
-              the displayed title so students never see it.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-56">Tag(s) to add to title</th>
-                    <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-36">Keyword fallback</th>
-                    <th className="text-left py-2 font-medium text-muted-foreground">Bucket shown on site</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {[
-                    { tags: '[E]  or  [Event]', keyword: '—', bucket: 'Events' },
-                    { tags: '[M]  or  [Meeting]', keyword: '"meeting" anywhere', bucket: 'Meetings' },
-                    { tags: '[OH]  or  [Office Hours]', keyword: '"office hours" anywhere', bucket: 'Office Hours' },
-                    { tags: '[O]  or  [Other]', keyword: '—', bucket: 'Other' },
-                    { tags: '(none)', keyword: '—', bucket: 'Other  (default)' },
-                  ].map(row => (
-                    <tr key={row.tags}>
-                      <td className="py-2 pr-4"><code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{row.tags}</code></td>
-                      <td className="py-2 pr-4 text-xs text-muted-foreground">{row.keyword}</td>
-                      <td className="py-2 font-medium text-sm">{row.bucket}</td>
+          {/* ── Event type buckets & RSVP/Tickets ── */}
+          <div className="space-y-4">
+            <div className="rounded-xl border border-border bg-card p-5">
+              <h3 className="font-semibold mb-1 flex items-center gap-2">
+                <FolderOpen className="h-4 w-4 text-primary" />
+                How events are sorted &amp; flagged (Filters and RSVPs)
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                The sync engine reads the <strong>title</strong> and <strong>description</strong> of each Outlook event
+                and assigns it an event type (for filtering) and an RSVP flag (for ticketing). The tag is stripped from
+                the displayed title so students never see it.
+              </p>
+
+              <h4 className="font-medium text-sm mb-2 text-foreground">1. Setting Event Types (Buckets)</h4>
+              <div className="overflow-x-auto mb-4">
+                <table className="w-full text-sm border-collapse">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-56">Tag(s) to add to title</th>
+                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-36">Keyword fallback</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">Bucket shown on site</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-3 rounded-lg bg-muted/50 border border-border px-4 py-3 text-sm text-muted-foreground">
-              <strong className="text-foreground">Example:</strong>{' '}
-              An Outlook event titled <code className="font-mono text-xs bg-background border border-border rounded px-1">[M] Fall Planning Meeting</code> appears
-              on the site as <strong>"Fall Planning Meeting"</strong> in the <strong>Meetings</strong> bucket.
-            </div>
-          </div>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {[
+                      { tags: '[E]  or  [Event]', keyword: '—', bucket: 'Events' },
+                      { tags: '[M]  or  [Meeting]', keyword: '"meeting" anywhere', bucket: 'Meetings' },
+                      { tags: '[OH]  or  [Office Hours]', keyword: '"office hours" anywhere', bucket: 'Office Hours' },
+                      { tags: '[O]  or  [Other]', keyword: '—', bucket: 'Other' },
+                      { tags: '(none)', keyword: '—', bucket: 'Other  (default)' },
+                    ].map(row => (
+                      <tr key={row.tags}>
+                        <td className="py-2 pr-4"><code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{row.tags}</code></td>
+                        <td className="py-2 pr-4 text-xs text-muted-foreground">{row.keyword}</td>
+                        <td className="py-2 font-medium text-sm">{row.bucket}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* ── RSVP / ticketing flag ── */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="font-semibold mb-1 flex items-center gap-2">
-              <Ticket className="h-4 w-4 text-primary" />
-              RSVP &amp; ticketing flag
-            </h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              When the sync detects any of the following signals, it marks the event as requiring RSVP and shows
-              a prominent "Tickets / RSVP" button on the event card and detail page.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-3 mb-3">
-              {[
-                { signal: '[T] or [Ticket] in title', how: 'Add to the very start of the event title' },
-                { signal: 'Word "tickets" in title or desc', how: 'e.g. "Tickets available on Eventbrite"' },
-                { signal: 'Word "rsvp" in title or desc', how: 'e.g. "RSVP required by Friday"' },
-                { signal: 'Word "register" in title or desc', how: 'e.g. "Register at the link below"' },
-              ].map(({ signal, how }) => (
-                <div key={signal} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
-                  <code className="font-mono text-xs">{signal}</code>
-                  <p className="text-xs text-muted-foreground mt-0.5">{how}</p>
-                </div>
-              ))}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              You can also toggle the RSVP flag and add a link + note directly on the event page after logging in —
-              useful if registration details aren't ready when you create the Outlook event.
-            </p>
-          </div>
-
-          {/* ── How the sync works ── */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="font-semibold mb-1 flex items-center gap-2">
-              <RefreshCw className="h-4 w-4 text-primary" />
-              How the sync works under the hood
-            </h3>
-            <p className="text-sm text-muted-foreground mb-3">
-              Understanding the sync cycle helps you know when to expect changes and what you can safely edit on the site.
-            </p>
-            <div className="space-y-2">
-              {[
-                {
-                  label: 'Runs every 14 minutes',
-                  detail: 'The backend fetches your ICS feed on a fixed schedule. New Outlook events typically appear on the site within 14 minutes of being created.',
-                },
-                {
-                  label: 'Each event is matched by a unique ID (UID)',
-                  detail: 'Outlook assigns every event a stable UID. The sync uses this to update existing events rather than create duplicates. Changing an event in Outlook updates the same record on the site.',
-                },
-                {
-                  label: 'Microsoft Teams boilerplate is stripped automatically',
-                  detail: 'Long Teams meeting join links and repeated legal footers are removed from the description. The Teams join URL is preserved in a clean [Teams: https://...] format.',
-                },
-                {
-                  label: 'Manually edited events are frozen',
-                  detail: "If you edit an event's title, description, location, or type directly on the site, it gets a 'manually edited' flag. Future syncs skip that event — your on-site version is preserved. An amber banner appears on the event page. Click 'Resume Auto-Sync' to unfreeze.",
-                },
-                {
-                  label: 'Deleted Outlook events are removed',
-                  detail: 'If an event no longer appears in your ICS feed (because you deleted or cancelled it in Outlook), the sync removes it from the site automatically.',
-                },
-                {
-                  label: 'Collaboration statuses are never overwritten',
-                  detail: "If another club accepts or rejects a collaboration on your event, that decision is permanent — the sync will never reset it back to pending.",
-                },
-              ].map(({ label, detail }) => (
-                <div key={label} className="flex gap-3 text-sm">
-                  <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0 translate-y-1.5" />
-                  <div>
-                    <span className="font-medium">{label} — </span>
-                    <span className="text-muted-foreground">{detail}</span>
+              <h4 className="font-medium text-sm mt-6 mb-2 text-foreground">2. Setting Tickets &amp; RSVP</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Include any of the following to automatically display a "Tickets / RSVP" button on your event.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                {[
+                  { signal: '[T] or [Ticket] in title', how: 'Add to the very start of the event title' },
+                  { signal: 'Word "tickets" in title or desc', how: 'e.g. "Tickets available on Eventbrite"' },
+                  { signal: 'Word "rsvp" in title or desc', how: 'e.g. "RSVP required by Friday"' },
+                  { signal: 'Word "register" in title or desc', how: 'e.g. "Register at the link below"' },
+                ].map(({ signal, how }) => (
+                  <div key={signal} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <code className="font-mono text-xs">{signal}</code>
+                    <p className="text-xs text-muted-foreground mt-0.5">{how}</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
+                ))}
+              </div>
 
-          {/* ── Event detail best practices ── */}
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 p-5">
-            <h3 className="font-semibold mb-1 flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
-              <CheckCircle className="h-4 w-4" />
-              Make your events clear for students
-            </h3>
-            <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-4">
-              Students use this site to decide whether and how to attend events. The more detail you provide in Outlook,
-              the more useful your event listing will be.
-            </p>
-            <div className="grid sm:grid-cols-2 gap-3">
-              {[
-                {
-                  field: '📍 Location',
-                  tip: "Include the building name, room number, or full address. For virtual events add the Teams/Zoom link. Avoid vague entries like \"TBD\" — students won't show up if they can't find you.",
-                },
-                {
-                  field: '📅 Date & time',
-                  tip: 'Set accurate start and end times in Outlook. The site displays both. If the end time is wrong students may arrive late or miss the event entirely.',
-                },
-                {
-                  field: '📝 Short description',
-                  tip: "Write 1–3 sentences explaining what the event is, who it's for, and why someone should come. Think: \"What would make a student stop scrolling and click?\"",
-                },
-                {
-                  field: '🎟 RSVP / tickets',
-                  tip: "If registration is required, include \"RSVP\" or \"Tickets\" in the title or description, and add the link in the event's RSVP field on the site. Students can't register for events they don't know about.",
-                },
-                {
-                  field: '👥 Intended audience',
-                  tip: 'Mention in the description whether the event is open to all students, members only, or a specific group. This prevents confusion and helps the right people show up.',
-                },
-                {
-                  field: '🔄 Keep events updated',
-                  tip: "If the location, time, or format changes, update it in Outlook (or directly on the site if you've manually edited it). The sync will propagate Outlook changes automatically unless the event is frozen.",
-                },
-              ].map(({ field, tip }) => (
-                <div key={field} className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/30 p-3">
-                  <p className="font-medium text-sm text-emerald-900 dark:text-emerald-200 mb-1">{field}</p>
-                  <p className="text-xs text-emerald-700 dark:text-emerald-400">{tip}</p>
-                </div>
-              ))}
+              <div className="mt-4 rounded-lg bg-muted/50 border border-border px-4 py-3 text-sm text-muted-foreground">
+                <strong className="text-foreground">Example Combo:</strong>{' '}
+                An Outlook event titled <code className="font-mono text-xs bg-background border border-border rounded px-1">[M][T] Fall Planning Meeting</code> appears
+                in the <strong>Meetings</strong> bucket and receives a <strong>Tickets / RSVP</strong> badge.
+              </div>
+              <p className="text-sm text-muted-foreground mt-4">
+                Note: You can also toggle the RSVP flag and add a link + note directly on the event page after logging in via the Hub Admin Dashboard —
+                useful if registration details aren't ready when you create the Outlook event.
+              </p>
+            </div>
+
+            {/* ── Event detail best practices ── */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 p-5">
+              <h3 className="font-semibold mb-1 flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                <CheckCircle className="h-4 w-4" />
+                Make your events clear for students
+              </h3>
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-3">
+                Students use this site to decide whether and how to attend events. The more detail you provide in Outlook,
+                the more useful your event listing will be.
+              </p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-4">
+                <strong className="text-emerald-900 dark:text-emerald-200">Why tagging and details matter:</strong> Students who subscribe to your club's calendar receive notifications directly in Outlook, Google Calendar, or Apple Calendar — the event title and description are the first (and sometimes only) thing they see. A clear title with the right tag ensures the event is categorized correctly on the site <em>and</em> gives subscribers enough context to decide whether to show up, all from a single calendar notification.
+              </p>
+              <div className="grid sm:grid-cols-2 gap-3">
+                {[
+                  {
+                    field: '📍 Location',
+                    tip: "Include the building name, room number, or full address. For virtual events add the Teams/Zoom link. Avoid vague entries like \"TBD\" — students won't show up if they can't find you.",
+                  },
+                  {
+                    field: '📅 Date & time',
+                    tip: 'Set accurate start and end times in Outlook. The site displays both. If the end time is wrong students may arrive late or miss the event entirely.',
+                  },
+                  {
+                    field: '📝 Short description',
+                    tip: "Write 1–3 sentences explaining what the event is, who it's for, and why someone should come. Think: \"What would make a student stop scrolling and click?\"",
+                  },
+                  {
+                    field: '🎟 RSVP / tickets',
+                    tip: "If registration is required, include \"RSVP\" or \"Tickets\" in the title or description, and add the link in the event's RSVP field on the site. Students can't register for events they don't know about.",
+                  },
+                  {
+                    field: '👥 Intended audience',
+                    tip: 'Mention in the description whether the event is open to all students, members only, or a specific group. This prevents confusion and helps the right people show up.',
+                  },
+                  {
+                    field: '🔄 Keep events updated',
+                    tip: "If the location, time, or format changes, update it in Outlook (or directly on the site if you've manually edited it). The sync will propagate Outlook changes automatically unless the event is frozen.",
+                  },
+                ].map(({ field, tip }) => (
+                  <div key={field} className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-emerald-950/30 p-3">
+                    <p className="font-medium text-sm text-emerald-900 dark:text-emerald-200 mb-1">{field}</p>
+                    <p className="text-xs text-emerald-700 dark:text-emerald-400">{tip}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
         </div>{/* end tagging guide */}
 
         <div className="space-y-3 mt-4">
@@ -500,6 +470,53 @@ export function Developers() {
               <p className="text-xs text-muted-foreground">{desc}</p>
             </div>
           ))}
+        </div>
+
+        {/* ── How the sync works (Moved to System Architecture) ── */}
+        <div className="rounded-xl border border-border bg-card p-5 mt-6">
+          <h3 className="font-semibold mb-1 flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-primary" />
+            Under the hood: Event Synchronization
+          </h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Technical details on the custom ICS sync cycle between the Node.js backend and University of Oregon calendars.
+          </p>
+          <div className="space-y-2">
+            {[
+              {
+                label: 'Cron Job Schedule',
+                detail: 'The backend worker pulls ICS feeds on a rolling schedule. Events appear on the site roughly 15 minutes after being successfully published to the ICS link.',
+              },
+              {
+                label: 'UID Reconciliation',
+                detail: 'Outlook assigns every event a stable UID. The continuous sync script reconciles this, executing partial UPSERTs into PostgreSQL to update records instead of duplicating.',
+              },
+              {
+                label: 'Regex Cleaners',
+                detail: 'The sync leverages Regex parsing to wipe boilerplate Teams meeting links and repetitive legal footers from descriptions.',
+              },
+              {
+                label: 'State Locks',
+                detail: "Editing an event via the Admin UI sets a boolean flag preventing the cron script from touching that event row in the future (disabling Outlook priority).",
+              },
+              {
+                label: 'Cascading Purge',
+                detail: 'ICS events absent from the active feed are auto-garbage collected within matching horizons.',
+              },
+              {
+                label: 'Permanent Approvals',
+                detail: "Approved / Rejected event collaboration status takes priority over raw ICS attendee lists.",
+              },
+            ].map(({ label, detail }) => (
+              <div key={label} className="flex gap-3 text-sm">
+                <span className="mt-0.5 h-1.5 w-1.5 rounded-full bg-primary shrink-0 translate-y-1.5" />
+                <div>
+                  <span className="font-medium">{label} — </span>
+                  <span className="text-muted-foreground">{detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
