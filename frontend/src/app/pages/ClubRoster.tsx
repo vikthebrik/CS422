@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 /**
  * @file ClubRoster.tsx
  * @description Public directory of all MCC clubs and departments. Route: /clubs
@@ -26,7 +27,7 @@ import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Checkbox } from '../components/ui/checkbox';
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
@@ -155,7 +156,7 @@ export function ClubRoster() {
 
   const canAddClub = currentUser?.role === 'admin';
 
-  const handleAddClub = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddClub = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
 
@@ -172,6 +173,7 @@ export function ClubRoster() {
       name: clubName,
       color: color || '#' + Math.floor(Math.random() * 16777215).toString(16),
       description,
+      orgType: 'union' as const,
     };
 
     addClub(newClub);
