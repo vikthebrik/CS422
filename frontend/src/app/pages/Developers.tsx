@@ -11,7 +11,7 @@
  *  6. API reference summary
  */
 
-import { ExternalLink, Github, Server, BookOpen, Calendar, RefreshCw, Mail, Tag, FolderOpen, Ticket, CheckCircle } from 'lucide-react';
+import { ExternalLink, Github, Server, BookOpen, Calendar, RefreshCw, Mail, Tag, FolderOpen, CheckCircle, Heart, Linkedin } from 'lucide-react';
 
 const GITHUB_REPO = 'https://github.com/vikthebrik/CS422';
 const API_BASE_URL = 'https://api.uomcc.org';
@@ -22,6 +22,7 @@ const DEVELOPERS = [
     role: 'Lead Full-Stack Developer',
     email: '',
     github: 'https://github.com/vikthebrik',
+    linkedin: '',
     bio: 'Led end-to-end architecture design, database modeling, and domain deployment. Managed user/stakeholder communication and debugging. Built the Express REST API, ICS sync pipeline, Supabase auth & PostgreSQL integration, email automation, and full frontend build.',
   },
   {
@@ -29,6 +30,7 @@ const DEVELOPERS = [
     role: 'Frontend Developer & UI Design',
     email: '',
     github: 'https://github.com/madelineluu',
+    linkedin: '',
     bio: 'Contributed to front end design and testing, server hosting, backend logic and caching, UI/UX layout decisions, and user-facing feature development across the React SPA.',
   },
   {
@@ -36,6 +38,7 @@ const DEVELOPERS = [
     role: 'Frontend Developer & QA',
     email: '',
     github: 'https://github.com/raynapatel',
+    linkedin: '',
     bio: 'Contributed to frontend development, cross-browser testing, and ensuring a consistent user experience across the application.',
   },
   {
@@ -43,6 +46,7 @@ const DEVELOPERS = [
     role: 'Frontend Developer & Documentation',
     email: '',
     github: 'https://github.com/EireannCoelho',
+    linkedin: '',
     bio: 'Contributed to frontend development, project documentation, and design system consistency throughout the application.',
   },
 ];
@@ -189,14 +193,11 @@ export function Developers() {
               <ExternalLink className="h-3 w-3 text-muted-foreground" />
             </a>
             <a
-              href="/assets/system_architecture.png"
-              target="_blank"
-              rel="noopener noreferrer"
+              href="#system-architecture"
               className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border bg-muted hover:bg-accent transition-colors text-sm font-medium"
             >
               <BookOpen className="h-4 w-4" />
               Full Architecture Diagram
-              <ExternalLink className="h-3 w-3 text-muted-foreground" />
             </a>
           </div>
         </div>
@@ -241,9 +242,70 @@ export function Developers() {
                     <Github className="h-3 w-3" /> GitHub
                   </a>
                 )}
+                {dev.linkedin && (
+                  <a href={dev.linkedin} target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <Linkedin className="h-3 w-3" /> LinkedIn
+                  </a>
+                )}
               </div>
             </div>
           ))}
+
+          {/* ── Special Thanks card ── */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <div>
+              <p className="font-semibold">Special Thanks</p>
+              <p className="text-xs text-muted-foreground">Inspirations &amp; Contributors</p>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <p className="text-sm font-medium">Miguel Pimienta</p>
+                  <a href="https://github.com/MiguelPimienta19/MiguelPimienta19" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <Github className="h-3 w-3" /> GitHub
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">Helped foster the idea early and gave us the inspiration to build this.</p>
+              </div>
+              <div className="border-t border-border" />
+              <div>
+                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                  <p className="text-sm font-medium">Damien Macalino</p>
+                  <a href="https://www.linkedin.com/in/damien-macalino/" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
+                    <Linkedin className="h-3 w-3" /> LinkedIn
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">Help with assets and ongoing support throughout the project.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Community card ── */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <div>
+              <p className="font-semibold flex items-center gap-1.5">
+                <Heart className="h-4 w-4 text-rose-500" /> Thank You
+              </p>
+              <p className="text-xs text-muted-foreground">Built with and for the community</p>
+            </div>
+            <div className="space-y-2.5 text-xs text-muted-foreground">
+              <div>
+                <p className="font-medium text-foreground text-sm mb-0.5">The MCC Community</p>
+                <p>Thank you to the Multicultural Center at the University of Oregon for the space and support that inspired this project.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground text-sm mb-0.5">Cultural Clubs &amp; Organizations</p>
+                <p>To every club that shares events and keeps the community thriving — this hub is for you.</p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground text-sm mb-0.5">Our Families</p>
+                <p>For the encouragement and support that made all of this possible.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -445,7 +507,7 @@ export function Developers() {
       </section>
 
       {/* ── System Architecture ───────────────────────────────────── */}
-      <section>
+      <section id="system-architecture" className="scroll-mt-24">
         <h2 className="text-xl font-semibold mb-1">System Architecture</h2>
         <p className="text-sm text-muted-foreground mb-4">
           3-tier layout: Client (Cloudflare + Vercel) → Application (Render/Express + ICS Sync) → Data (Supabase + Resend).
