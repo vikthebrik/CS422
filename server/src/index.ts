@@ -48,6 +48,17 @@
  * - `POST /admin/requests/:id/reject`  → mark rejected
  * - `DELETE /admin/requests`  → clear processed request history
  * - `PATCH /admin/clubs/:id/email` → immediately change club admin email
+ * - `GET  /admin/bug-reports`        → paginated bug reports (?status=open&page=1)
+ * - `PATCH /admin/bug-reports/:id`   → update status / admin_notes
+ * - `DELETE /admin/bug-reports/:id`  → permanently delete a report
+ * - `GET  /admin/announcements`      → all announcements
+ * - `POST /admin/announcements`      → create announcement
+ * - `PATCH /admin/announcements/:id` → update announcement
+ * - `DELETE /admin/announcements/:id`→ delete announcement
+ *
+ * ### Public (no auth required)
+ * - `GET  /announcements`       → active, non-expired announcements
+ * - `POST /bug-reports`         → submit bug report (attaches reporter_id if JWT present)
  * - `POST  /admin/users/:userId/email` → alias (ChangePassword.tsx "Change Email" for root)
  * - `POST /clubs`             → create new club
  * - `DELETE /clubs/:id`       → delete club + cascade events + user_roles
@@ -2237,6 +2248,241 @@ app.delete('/collab/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
     if (error) throw error;
 
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Announcements — public read, root CRUD
+// ---------------------------------------------------------------------------
+
+// GET /announcements — public; returns active, non-expired announcements
+app.get('/announcements', async (_req, res) => {
+  try {
+    // Fetch all active rows, then filter start/expire in JS to avoid
+    // PostgREST timestamp comparison syntax issues with chained .or()
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('id, title, body, link_url, link_text, type, weight, starts_at, expires_at, created_at')
+      .eq('active', true)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const now = Date.now();
+    const visible = (data ?? []).filter(a => {
+      if (a.starts_at && new Date(a.starts_at).getTime() > now) return false;
+      if (a.expires_at && new Date(a.expires_at).getTime() < now) return false;
+      return true;
+    });
+    res.json(visible);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/announcements — all announcements (requireRoot)
+app.get('/admin/announcements', requireRoot, async (_req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('announcements')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data ?? []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /admin/announcements — create (requireRoot)
+app.post('/admin/announcements', requireRoot, async (req, res) => {
+  try {
+    const { title, body, link_url, link_text, type, weight, active, starts_at, expires_at } = req.body;
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const { data, error } = await supabase
+      .from('announcements')
+      .insert({ title, body: body ?? null, link_url: link_url ?? null, link_text: link_text ?? null, type: type ?? 'info', weight: weight ?? 'subtle', active: active ?? true, starts_at: starts_at ?? null, expires_at: expires_at ?? null })
+      .select()
+      .single();
+    if (error) throw error;
+    res.status(201).json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /admin/announcements/:id — update (requireRoot)
+app.patch('/admin/announcements/:id', requireRoot, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates: Record<string, unknown> = {};
+    const fields = ['title', 'body', 'link_url', 'link_text', 'type', 'weight', 'active', 'starts_at', 'expires_at'];
+    for (const f of fields) {
+      if (req.body[f] !== undefined) updates[f] = req.body[f];
+    }
+    const { data, error } = await supabase
+      .from('announcements')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /admin/announcements/:id (requireRoot)
+app.delete('/admin/announcements/:id', requireRoot, async (req, res) => {
+  try {
+    const { error } = await supabase.from('announcements').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Bug Reports
+// ---------------------------------------------------------------------------
+
+// POST /bug-reports — public or authenticated submission
+app.post('/bug-reports', async (req: AuthenticatedRequest, res) => {
+  try {
+    const { email, type, title, description, url, userAgent, resolution } = req.body;
+    if (!title || !description) {
+      return res.status(400).json({ error: 'title and description are required' });
+    }
+
+    // Optionally attach reporter_id if a valid JWT was provided
+    let reporterId: string | null = null;
+    let reporterEmail: string | null = email ?? null;
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.slice(7);
+        const { data } = await supabase.auth.getUser(token);
+        if (data?.user) {
+          reporterId = data.user.id;
+          reporterEmail = reporterEmail ?? data.user.email ?? null;
+        }
+      } catch { /* ignore auth errors for public endpoint */ }
+    }
+
+    const { data: report, error } = await supabase
+      .from('bug_reports')
+      .insert({
+        reporter_email: reporterEmail,
+        reporter_id: reporterId,
+        type: type ?? 'bug',
+        title,
+        description,
+        url: url ?? null,
+        user_agent: userAgent ?? null,
+        screen_resolution: resolution ?? null,
+      })
+      .select('id, title, type')
+      .single();
+
+    if (error) throw error;
+
+    // Fire-and-forget internal alert email
+    if (process.env.RESEND_API_KEY) {
+      const adminEmail = process.env.SMTP_FROM?.match(/<(.+)>/)?.[1] ?? process.env.SMTP_FROM ?? 'mcc@uoregon.edu';
+      const typeLabel = (type ?? 'bug').replace('_', ' ');
+      try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
+        await resend.emails.send({
+          from: process.env.SMTP_FROM ?? 'MCC Calendar Hub <noreply@uomcc.org>',
+          to: adminEmail,
+          subject: `[MCC] New ${typeLabel}: ${title}`,
+          html: `<p><strong>Type:</strong> ${typeLabel}</p>
+<p><strong>Title:</strong> ${title}</p>
+<p><strong>Description:</strong></p><pre style="white-space:pre-wrap">${description}</pre>
+${reporterEmail ? `<p><strong>Reporter:</strong> ${reporterEmail}</p>` : ''}
+${url ? `<p><strong>Page:</strong> ${url}</p>` : ''}
+${resolution ? `<p><strong>Screen:</strong> ${resolution}</p>` : ''}
+<hr/><p style="font-size:12px;color:#6b7280">Submitted via MCC Calendar Hub bug reporter</p>`,
+        });
+      } catch (emailErr: any) {
+        log.warn(`Bug report alert email failed: ${emailErr.message}`);
+      }
+    }
+
+    res.status(201).json({ id: report.id });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /admin/bug-reports — paginated list (requireRoot)
+app.get('/admin/bug-reports', requireRoot, async (req, res) => {
+  try {
+    const status = req.query.status as string | undefined;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const pageSize = 25;
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from('bug_reports')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status && status !== 'all') {
+      query = query.eq('status', status);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+
+    res.json({ reports: data, total: count ?? 0, page, pageSize });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /admin/bug-reports/:id — update status / admin_notes (requireRoot)
+app.patch('/admin/bug-reports/:id', requireRoot, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, admin_notes } = req.body;
+
+    const updates: Record<string, unknown> = {};
+    if (status !== undefined) {
+      updates.status = status;
+      if (status === 'resolved') {
+        updates.resolved_at = new Date().toISOString();
+      } else {
+        updates.resolved_at = null;
+      }
+    }
+    if (admin_notes !== undefined) updates.admin_notes = admin_notes;
+
+    const { data, error } = await supabase
+      .from('bug_reports')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /admin/bug-reports/:id — permanently delete a report (requireRoot)
+app.delete('/admin/bug-reports/:id', requireRoot, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('bug_reports').delete().eq('id', id);
+    if (error) throw error;
+    res.status(204).end();
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

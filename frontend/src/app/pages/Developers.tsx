@@ -84,6 +84,11 @@ const USE_STEPS = [
   },
   {
     step: '5',
+    title: 'Download CSV exports',
+    desc: 'Two CSV downloads are available across the site:\n\n• Org Roster → "Download CSV" — exports a directory of all MCC clubs. A dialog lets you pick which clubs to include and which columns to export: org name, contact email, type (Union/Department), description, Instagram, Linktree, Engage, and team members grouped by section. The file downloads as mcc_clubs_info.csv — useful for outreach, records, or sharing the full club directory.\n\n• Club page → "Download CSV" — exports that club\'s recurring meeting schedule (Day, Time, Location, Notes) as a spreadsheet-ready CSV named after the club.',
+  },
+  {
+    step: '6',
     title: 'Club officer login',
     desc: 'Officers can sign in with the "Admin Sign In" button to edit their club\'s events, manage RSVP settings, update club info, add team members, and handle collaboration requests.',
   },
@@ -324,7 +329,7 @@ export function Developers() {
               </div>
               <div>
                 <p className="font-medium text-sm">{title}</p>
-                <p className="text-sm text-muted-foreground mt-0.5">{desc}</p>
+                <p className="text-sm text-muted-foreground mt-0.5 whitespace-pre-line">{desc}</p>
               </div>
             </div>
           ))}

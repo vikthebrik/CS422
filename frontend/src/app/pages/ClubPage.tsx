@@ -24,7 +24,7 @@
  * | Change email   | PATCH /admin/clubs/:id/email | updateClub()  |
  */
 import { useParams, useNavigate } from 'react-router';
-import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X, Download, Trash2 } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X, Download, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -72,6 +72,9 @@ export function ClubPage() {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [scheduleRows, setScheduleRows] = useState<MeetingScheduleEntry[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
+
+  // My page link copy state
+  const [pageLinkCopied, setPageLinkCopied] = useState(false);
 
   // Email copy + edit state
   const [emailCopied, setEmailCopied] = useState(false);
@@ -481,6 +484,71 @@ export function ClubPage() {
               </a>
             )}
           </div>
+
+          {/* Meeting schedule inline — unions only */}
+          {club.orgType !== 'department' && club.meetingSchedule && club.meetingSchedule.length > 0 && (
+            <div className="border-t border-border pt-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5" />
+                  Meeting Schedule
+                </span>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={openScheduleEdit}
+                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    Edit
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {club.meetingSchedule.map((row, i) => (
+                  <div key={i} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-sm">
+                    <span className="font-medium">{row.day}</span>
+                    {row.time && <><span className="text-muted-foreground">·</span><span className="text-muted-foreground">{row.time}</span></>}
+                    {row.location && <><span className="text-muted-foreground">·</span><span className="flex items-center gap-0.5 text-muted-foreground"><MapPin className="h-3 w-3" />{row.location}</span></>}
+                  </div>
+                ))}
+              </div>
+              {club.meetingSchedule.some(r => r.notes) && (
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {club.meetingSchedule.filter(r => r.notes).map(r => r.notes).join(' · ')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* My Page link — visible to club admins for sharing in linktrees/bios */}
+          {canEdit && (
+            <div className="border-t border-border pt-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                <ExternalLink className="h-3.5 w-3.5" />
+                My Page Link
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 rounded bg-muted px-3 py-1.5 text-xs font-mono text-foreground truncate">
+                  {window.location.origin}/club/{clubId}
+                </code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(`${window.location.origin}/club/${clubId}`);
+                    setPageLinkCopied(true);
+                    setTimeout(() => setPageLinkCopied(false), 2000);
+                  }}
+                  className="shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-border bg-background hover:bg-accent transition-colors"
+                  title="Copy link"
+                >
+                  {pageLinkCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {pageLinkCopied ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Share this link in your Linktree, bio, or anywhere to send students directly to your page.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -591,8 +659,8 @@ export function ClubPage() {
         </CardContent>
       </Card>
 
-      {/* Meeting Schedule */}
-      {(club.meetingSchedule?.length || canEdit) && (
+      {/* Meeting Schedule — full card for departments (or for admin editing on any org) */}
+      {(club.orgType === 'department' ? (club.meetingSchedule?.length || canEdit) : canEdit) && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">

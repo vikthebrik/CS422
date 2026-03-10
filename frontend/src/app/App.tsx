@@ -47,6 +47,8 @@ import { RequestAccount } from './pages/RequestAccount';
 import { ChangePassword } from './pages/ChangePassword';
 import { ConfirmEmail } from './pages/ConfirmEmail';
 import { Developers } from './pages/Developers';
+import { BugReportsAdmin } from './pages/BugReportsAdmin';
+import { AnnouncementsAdmin } from './pages/AnnouncementsAdmin';
 import { NotFound } from './pages/NotFound';
 import { RouteError } from './pages/RouteError';
 
@@ -82,6 +84,8 @@ const router = createBrowserRouter([
         element: <ProtectedRoute role="admin" />,
         children: [
           { path: "club-management", Component: ClubManagement },
+          { path: "bug-reports", Component: BugReportsAdmin },
+          { path: "announcements", Component: AnnouncementsAdmin },
         ],
       },
 
