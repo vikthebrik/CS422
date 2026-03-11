@@ -155,18 +155,31 @@ export async function populate(clubName: string, icsUrl: string) {
             }).filter(a => a.email);
         };
 
-        const upsertAttendeeCollabs = async (eventId: string, attendees: Array<{ email: string; partstat: string }>) => {
+        const upsertAttendeeCollabs = async (eventId: string, attendees: Array<{ email: string; partstat: string }>, eventTitle: string, hostClubName: string) => {
             for (const att of attendees) {
                 const attClubId = emailToClubId[att.email];
                 if (!attClubId || attClubId === club.id) continue;
                 const status = att.partstat === 'ACCEPTED' ? 'accepted' : 'pending';
-                // ignoreDuplicates: true — never overwrite a status the club admin has manually set
-                const { error: ce } = await supabase
+                // Check if record already exists — preserves any manually-set accept/reject status
+                const { data: existing } = await supabase
                     .from('collaborations')
-                    .upsert({ event_id: eventId, club_id: attClubId, role: 'secondary', status },
-                        { onConflict: 'event_id,club_id', ignoreDuplicates: true });
-                if (ce) console.error(`Failed to upsert attendee collab:`, ce);
-                else collabCount++;
+                    .select('id')
+                    .eq('event_id', eventId)
+                    .eq('club_id', attClubId)
+                    .maybeSingle();
+                if (!existing) {
+                    const { error: ce } = await supabase
+                        .from('collaborations')
+                        .insert({ event_id: eventId, club_id: attClubId, role: 'secondary', status });
+                    if (ce) console.error(`Failed to insert attendee collab:`, ce);
+                    else {
+                        collabCount++;
+                        if (status === 'pending') {
+                            const targetName = allClubs?.find((c: any) => c.id === attClubId)?.name ?? att.email;
+                            await sendCollabInviteEmail(attClubId, targetName, eventTitle, hostClubName, eventId);
+                        }
+                    }
+                }
             }
         };
 
@@ -397,7 +410,7 @@ export async function populate(clubName: string, icsUrl: string) {
                                 if (updateError) console.error(`Failed to update event ${uid}:`, updateError);
                             }
                             processedCount++;
-                            await upsertAttendeeCollabs(existingEvent.id, attendees);
+                            await upsertAttendeeCollabs(existingEvent.id, attendees, title, club.name);
                             await upsertCollabTagCollabs(existingEvent.id, collabTags, title);
 
                         } else {
@@ -444,7 +457,7 @@ export async function populate(clubName: string, icsUrl: string) {
                         else {
                             processedCount++;
                             // Process attendees and [collab: X] tags so invited clubs get collaboration records
-                            await upsertAttendeeCollabs(newEvent.id, attendees);
+                            await upsertAttendeeCollabs(newEvent.id, attendees, title, club.name);
                             await upsertCollabTagCollabs(newEvent.id, collabTags, title);
                         }
                     }

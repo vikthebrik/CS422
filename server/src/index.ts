@@ -2482,7 +2482,7 @@ app.post('/bug-reports', async (req: AuthenticatedRequest, res) => {
 
     // Fire-and-forget internal alert email
     if (process.env.RESEND_API_KEY) {
-      const adminEmail = process.env.SMTP_FROM?.match(/<(.+)>/)?.[1] ?? process.env.SMTP_FROM ?? 'mcc@uoregon.edu';
+      const adminEmail = 'mcc@uoregon.edu';
       const typeLabel = (type ?? 'bug').replace('_', ' ');
       try {
         const resend = new Resend(process.env.RESEND_API_KEY);
