@@ -345,13 +345,14 @@ export async function populate(clubName: string, icsUrl: string) {
 
                     const rawTitle = event.summary || 'Untitled Event';
                     // Strip all known MCC shortcode tags from anywhere in the title
-                    // (they may appear at start, end, or multiple times)
+                    // (they may appear at start, end, or multiple times, with or without spaces)
                     const title = rawTitle
                       .replace(/\[(?:e|event|m|meeting|oh|office\s*hours|o|other|t|ticket)\]\s*/gi, '')
+                      .replace(/\[(?:collab|c):\s*[^\]]+\]\s*/gi, '')
                       .trim();
                     const rawDescription = event.description || '';
-                    // Parse collab tags before stripping them from the stored description
-                    const collabTags = parseCollabTags(rawDescription);
+                    // Parse collab tags from both title and description
+                    const collabTags = [...new Set([...parseCollabTags(rawTitle), ...parseCollabTags(rawDescription)])];
                     const description = cleanDescription(rawDescription)
                         .replace(/\[(?:collab|c):\s*[^\]]+\]/gi, '')
                         .trim();

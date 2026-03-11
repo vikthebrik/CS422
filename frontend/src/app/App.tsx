@@ -51,6 +51,7 @@ import { BugReportsAdmin } from './pages/BugReportsAdmin';
 import { AnnouncementsAdmin } from './pages/AnnouncementsAdmin';
 import { NotFound } from './pages/NotFound';
 import { RouteError } from './pages/RouteError';
+import { RsvpUnavailable } from './pages/RsvpUnavailable';
 
 const router = createBrowserRouter([
   {
@@ -69,6 +70,7 @@ const router = createBrowserRouter([
       { path: "request-account", Component: RequestAccount },
       { path: "confirm-email", Component: ConfirmEmail },
       { path: "developers", Component: Developers },
+      { path: "rsvp-unavailable", Component: RsvpUnavailable },
 
       // Any authenticated user
       {

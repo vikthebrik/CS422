@@ -325,19 +325,32 @@ export function EventPage() {
       </div>
 
       {/* RSVP / Tickets */}
-      {event.requiresRsvp && event.rsvpLink && (
-        <a
-          href={event.rsvpLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex flex-col items-center justify-center gap-0.5 w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
-        >
-          <span className="flex items-center gap-2">
-            <Ticket className="h-5 w-5" />
-            Tickets / RSVP
-          </span>
-          <span className="text-xs font-normal opacity-80">Click here to register</span>
-        </a>
+      {event.requiresRsvp && (
+        event.rsvpLink ? (
+          <a
+            href={event.rsvpLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col items-center justify-center gap-0.5 w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+          >
+            <span className="flex items-center gap-2">
+              <Ticket className="h-5 w-5" />
+              Tickets / RSVP
+            </span>
+            <span className="text-xs font-normal opacity-80">Click here to register</span>
+          </a>
+        ) : (
+          <a
+            href="/rsvp-unavailable"
+            className="flex flex-col items-center justify-center gap-0.5 w-full px-4 py-3 rounded-lg bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+          >
+            <span className="flex items-center gap-2">
+              <Ticket className="h-5 w-5" />
+              Tickets / RSVP
+            </span>
+            <span className="text-xs font-normal opacity-80">Click here to register</span>
+          </a>
+        )
       )}
 
       {/* Description Card */}
