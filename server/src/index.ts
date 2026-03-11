@@ -256,11 +256,10 @@ app.use(cors({
     }
 
     // Project custom domains
-    if (origin === 'https://www.uomcc.org' || origin === 'https://www.api.uomcc.org') {
+    if (origin === 'https://www.uomcc.org' || origin === 'https://api.uomcc.org') {
       return callback(null, true);
     }
 
-    log.error(`CORS rejected origin: "${origin}"`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
