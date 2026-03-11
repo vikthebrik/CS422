@@ -260,7 +260,7 @@ app.use(cors({
       return callback(null, true);
     }
 
-    log.warn(`CORS rejected origin: "${origin}"`);
+    log.error(`CORS rejected origin: "${origin}"`);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
