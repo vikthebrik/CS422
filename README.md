@@ -78,6 +78,10 @@ App runs on `http://localhost:5173`.
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability disclosure policy |
 
+## Academic Context
+
+This project was developed as a capstone for **CS 422: Software Methodology** at the University of Oregon (Winter 2026). It was built as a real-world deployment for the UO Multicultural Center rather than a toy exercise — the app has been handed off to MCC staff and remains in active use beyond the course.
+
 ## Contributing
 
 Contributions are welcome! Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on opening issues, submitting pull requests, and the development workflow.
