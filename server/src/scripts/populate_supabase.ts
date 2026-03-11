@@ -331,8 +331,7 @@ export async function populate(clubName: string, icsUrl: string) {
 
         for (const key in events) {
             if (events.hasOwnProperty(key)) {
-                // @ts-ignore
-                const event = events[key];
+                const event = events[key] as any;
                 if (event.type === 'VEVENT') {
                     // Robust date handling
                     const start = event.start;
