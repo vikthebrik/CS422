@@ -127,13 +127,35 @@ async function sendPasswordReset(email: string) {
   }
 }
 
-function buildResetEmail(resetUrl: string): string {
+// ---------------------------------------------------------------------------
+// Shared branded email template
+// ---------------------------------------------------------------------------
+const ASSET_LOOKING_DOWN = 'https://www.uomcc.org/assets/Looking%20Down.png';
+const ASSET_WAVING = 'https://www.uomcc.org/assets/Waving.png';
+
+interface BrandedEmailOpts {
+  asset: string;
+  title: string;
+  bodyHtml: string;
+  ctaUrl?: string;
+  ctaLabel?: string;
+  footerNote?: string;
+}
+
+function buildBrandedEmail(opts: BrandedEmailOpts): string {
+  const { asset, title, bodyHtml, ctaUrl, ctaLabel, footerNote } = opts;
+  const ctaBlock = ctaUrl && ctaLabel
+    ? `<a href="${ctaUrl}" style="display:inline-block;background-color:#004F35;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;margin-top:8px;">${ctaLabel}</a>`
+    : '';
+  const footerExtra = footerNote
+    ? `<p style="margin:20px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">${footerNote}</p>`
+    : '';
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reset your password</title>
+  <title>${title}</title>
 </head>
 <body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:40px 20px;">
@@ -142,24 +164,17 @@ function buildResetEmail(resetUrl: string): string {
         <table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
           <tr>
             <td style="background-color:#004F35;padding:32px;text-align:center;">
-              <img src="https://www.uomcc.org/assets/Looking%20Down.png" alt="" style="height:64px;width:64px;object-fit:contain;display:block;margin:0 auto 12px;" />
+              <img src="${asset}" alt="" style="height:64px;width:64px;object-fit:contain;display:block;margin:0 auto 12px;" />
               <div style="color:#ffffff;font-size:20px;font-weight:600;">MCC Calendar Hub</div>
               <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-top:4px;">University of Oregon Multicultural Center</div>
             </td>
           </tr>
           <tr>
             <td style="padding:40px 32px;text-align:center;">
-              <h2 style="margin:0 0 12px;font-size:22px;color:#111827;font-weight:600;">Reset Your Password</h2>
-              <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.6;">
-                We received a request to reset the password for your account.
-                Click the button below to choose a new password. This link expires in 24&nbsp;hours.
-              </p>
-              <a href="${resetUrl}" style="display:inline-block;background-color:#004F35;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">
-                Reset Password
-              </a>
-              <p style="margin:28px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
-                If you didn't request a password reset, you can safely ignore this email — your password won't change.
-              </p>
+              <h2 style="margin:0 0 16px;font-size:22px;color:#111827;font-weight:600;">${title}</h2>
+              <div style="font-size:15px;color:#6b7280;line-height:1.7;text-align:left;">${bodyHtml}</div>
+              ${ctaBlock}
+              ${footerExtra}
             </td>
           </tr>
           <tr>
@@ -176,6 +191,17 @@ function buildResetEmail(resetUrl: string): string {
   </table>
 </body>
 </html>`;
+}
+
+function buildResetEmail(resetUrl: string): string {
+  return buildBrandedEmail({
+    asset: ASSET_LOOKING_DOWN,
+    title: 'Reset Your Password',
+    bodyHtml: `<p style="margin:0 0 24px;">We received a request to reset the password for your MCC Calendar Hub account. Click the button below to choose a new password. This link expires in 24&nbsp;hours.</p>`,
+    ctaUrl: resetUrl,
+    ctaLabel: 'Reset Password',
+    footerNote: "If you didn't request a password reset, you can safely ignore this email — your password won't change.",
+  });
 }
 
 // Creates a throwaway Supabase client for signInWithPassword so the shared
@@ -2133,6 +2159,56 @@ app.post('/events/:id/collaborators', requireAuth, async (req: AuthenticatedRequ
 
     if (error) throw error;
     clearCacheKey('events:all');
+
+    // Fire-and-forget: notify the collab club's admin
+    if (process.env.RESEND_API_KEY) {
+      (async () => {
+        try {
+          const [{ data: evtFull }, { data: roleRow }] = await Promise.all([
+            supabase
+              .from('events')
+              .select('title, start_time, clubs!events_club_id_fkey(name)')
+              .eq('id', id)
+              .single(),
+            supabase
+              .from('user_roles')
+              .select('email')
+              .eq('club_id', clubId)
+              .single(),
+          ]);
+          if (!evtFull || !roleRow?.email) return;
+          const hostName = (evtFull.clubs as any)?.name ?? 'Another club';
+          const eventTitle = evtFull.title;
+          const startDate = new Date(evtFull.start_time).toLocaleDateString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+          });
+          const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+          const resend = new Resend(process.env.RESEND_API_KEY);
+          await resend.emails.send({
+            from: process.env.SMTP_FROM ?? 'MCC Calendar Hub <noreply@uomcc.org>',
+            to: roleRow.email,
+            subject: `You've been added as a collaborator — ${eventTitle}`,
+            html: buildBrandedEmail({
+              asset: ASSET_WAVING,
+              title: "You're a Collaborator!",
+              bodyHtml: `
+                <p style="margin:0 0 16px;"><strong>${hostName}</strong> has added your organization as a collaborator on an upcoming event:</p>
+                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 20px;margin-bottom:20px;text-align:left;">
+                  <div style="font-size:16px;font-weight:700;color:#111827;margin-bottom:4px;">${eventTitle}</div>
+                  <div style="font-size:13px;color:#6b7280;">${startDate}</div>
+                  <div style="font-size:13px;color:#6b7280;margin-top:2px;">Hosted by ${hostName}</div>
+                </div>
+                <p style="margin:0;">Log in to MCC Calendar Hub to view the event details and manage your collaborations.</p>`,
+              ctaUrl: `${frontendUrl}/collab`,
+              ctaLabel: 'View Collaborations',
+            }),
+          });
+        } catch (emailErr: any) {
+          log.warn(`Collab notification email failed: ${emailErr.message}`);
+        }
+      })();
+    }
+
     res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -2414,13 +2490,22 @@ app.post('/bug-reports', async (req: AuthenticatedRequest, res) => {
           from: process.env.SMTP_FROM ?? 'MCC Calendar Hub <noreply@uomcc.org>',
           to: adminEmail,
           subject: `[MCC] New ${typeLabel}: ${title}`,
-          html: `<p><strong>Type:</strong> ${typeLabel}</p>
-<p><strong>Title:</strong> ${title}</p>
-<p><strong>Description:</strong></p><pre style="white-space:pre-wrap">${description}</pre>
-${reporterEmail ? `<p><strong>Reporter:</strong> ${reporterEmail}</p>` : ''}
-${url ? `<p><strong>Page:</strong> ${url}</p>` : ''}
-${resolution ? `<p><strong>Screen:</strong> ${resolution}</p>` : ''}
-<hr/><p style="font-size:12px;color:#6b7280">Submitted via MCC Calendar Hub bug reporter</p>`,
+          html: buildBrandedEmail({
+            asset: ASSET_LOOKING_DOWN,
+            title: `New ${typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1)} Report`,
+            bodyHtml: `
+              <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;width:110px;">Type</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#6b7280;">${typeLabel}</td></tr>
+                <tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;">Title</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#6b7280;">${title}</td></tr>
+                ${reporterEmail ? `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;">Reporter</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#6b7280;">${reporterEmail}</td></tr>` : ''}
+                ${url ? `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;">Page</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#6b7280;word-break:break-all;">${url}</td></tr>` : ''}
+                ${resolution ? `<tr><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#374151;font-weight:600;">Screen</td><td style="padding:8px 0;border-bottom:1px solid #f3f4f6;color:#6b7280;">${resolution}</td></tr>` : ''}
+              </table>
+              <div style="margin-top:20px;">
+                <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">Description</div>
+                <pre style="margin:0;padding:12px 16px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;color:#374151;white-space:pre-wrap;font-family:inherit;">${description}</pre>
+              </div>`,
+          }),
         });
       } catch (emailErr: any) {
         log.warn(`Bug report alert email failed: ${emailErr.message}`);
