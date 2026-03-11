@@ -1,6 +1,20 @@
-# CS422: MCC Scheduler
+# MCC Scheduler
 
-Web-based calendar hub that aggregates Multicultural Center (MCC) student organization schedules and provides custom ICS subscription links.
+A calendar aggregator for [University of Oregon Multicultural Center (MCC)](https://mcc.uoregon.edu/) student organizations. Club officers sync their Outlook calendars once; students browse all MCC events in one place and subscribe to personalized ICS feeds filtered by club, event type, or any combination — so their calendar app stays up to date automatically.
+
+![React](https://img.shields.io/badge/React-18-61dafb?logo=react&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5-646cff?logo=vite&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3-38bdf8?logo=tailwindcss&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ecf8e?logo=supabase&logoColor=white)
+
+## Live Deployment
+
+| Service | URL |
+|---------|-----|
+| Frontend (Vercel) | _configured per deployment — see `FRONTEND_URL` env var_ |
+| API (Render) | `https://mcc-scheduler-api.onrender.com` |
 
 ## Monorepo Layout
 
@@ -10,6 +24,17 @@ Web-based calendar hub that aggregates Multicultural Center (MCC) student organi
 | `server/` | Express REST API + ICS sync cron. Deploy to Render. |
 | `docs/` | Component and feature reference (Obsidian-style wiki). |
 | `plans/` | Operational guides (deployment, club admin how-to, email config). |
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Backend | Node.js, Express, TypeScript |
+| Database | Supabase (PostgreSQL, 3NF schema) |
+| Email | Resend SDK (transactional — password reset, account approval) |
+| ICS | node-ical (Outlook feed parsing), ical-generator (subscription export) |
+| Deployment | Vercel (frontend) + Render (API) |
 
 ## Quick Start (Local Development)
 
@@ -50,3 +75,13 @@ App runs on `http://localhost:5173`.
 | [`plans/deployment-guide.md`](plans/deployment-guide.md) | Render + Vercel + Supabase deployment steps |
 | [`plans/club-admin-guide.md`](plans/club-admin-guide.md) | End-user guide for club officers |
 | [`server/DB_MANUAL.md`](server/DB_MANUAL.md) | Database schema reference |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history and release notes |
+| [`SECURITY.md`](SECURITY.md) | Vulnerability disclosure policy |
+
+## Contributing
+
+Contributions are welcome! Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on opening issues, submitting pull requests, and the development workflow.
+
+## License
+
+This project is licensed under the [Creative Commons Attribution-NonCommercial 4.0 International License](LICENSE). See `LICENSE` for details.
