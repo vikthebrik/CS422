@@ -250,6 +250,16 @@ app.use(cors({
       return callback(null, true);
     }
 
+    // Render service origins — server dashboard triggers sync from the same host
+    if (origin.endsWith('.onrender.com')) {
+      return callback(null, true);
+    }
+
+    // Project custom domains
+    if (origin === 'https://www.uomcc.org' || origin === 'https://www.api.uomcc.org') {
+      return callback(null, true);
+    }
+
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true
