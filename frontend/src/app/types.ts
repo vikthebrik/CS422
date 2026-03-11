@@ -73,6 +73,8 @@ export interface Club {
   sectionLabels?: { exec?: string; board?: string; intern?: string };
   /** Approximate recurring meeting schedule — stored in metadata_tags.meeting_schedule */
   meetingSchedule?: MeetingScheduleEntry[];
+  /** Short code set by MCC admin for use in [collab: X] Outlook description tags */
+  collabCode?: string;
 }
 
 export interface User {

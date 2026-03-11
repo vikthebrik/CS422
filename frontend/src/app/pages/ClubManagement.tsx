@@ -36,7 +36,7 @@
  */
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail } from 'lucide-react';
+import { Trash2, Plus, RefreshCw, Building2, ImageIcon, CheckCircle, XCircle, Users, ChevronDown, ChevronUp, AlertTriangle, Calendar, Pencil, X, Mail, Tag } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -60,6 +60,7 @@ interface AccountRequest {
   club_name: string;
   contact_email: string;
   message?: string;
+  desired_collab_code?: string;
   status: 'pending' | 'approved' | 'rejected';
   created_at: string;
 }
@@ -93,6 +94,7 @@ export function ClubManagement() {
   const [approvingId, setApprovingId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [requestOrgTypes, setRequestOrgTypes] = useState<Record<string, 'union' | 'department'>>({});
+  const [requestCollabCodes, setRequestCollabCodes] = useState<Record<string, string>>({});
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [rejectConfirm, setRejectConfirm] = useState<AccountRequest | null>(null);
@@ -118,6 +120,11 @@ export function ClubManagement() {
   const [emailDialogClub, setEmailDialogClub] = useState<Club | null>(null);
   const [emailInput, setEmailInput] = useState('');
   const [savingEmail, setSavingEmail] = useState(false);
+
+  // Collab code
+  const [collabCodeDialogClub, setCollabCodeDialogClub] = useState<Club | null>(null);
+  const [collabCodeInput, setCollabCodeInput] = useState('');
+  const [savingCollabCode, setSavingCollabCode] = useState(false);
 
   const apiCall = useCallback(
     (method: string, path: string, body?: object) =>
@@ -297,9 +304,10 @@ export function ClubManagement() {
 
   const handleApprove = async (request: AccountRequest) => {
     const orgType = requestOrgTypes[request.id] ?? 'union';
+    const collabCode = requestCollabCodes[request.id] ?? request.desired_collab_code ?? '';
     setApprovingId(request.id);
     try {
-      const res = await apiCall('POST', `/admin/requests/${request.id}/approve`, { orgType });
+      const res = await apiCall('POST', `/admin/requests/${request.id}/approve`, { orgType, collabCode: collabCode.trim() || null });
       const data = await res.json();
       if (!res.ok) { toast.error(data.error ?? 'Approval failed'); return; }
       setRequests(prev => prev.map(r => r.id === request.id ? { ...r, status: 'approved' } : r));
@@ -367,6 +375,24 @@ export function ClubManagement() {
     }
   };
 
+  const handleSaveCollabCode = async () => {
+    if (!collabCodeDialogClub) return;
+    setSavingCollabCode(true);
+    try {
+      const res = await apiCall('PATCH', `/clubs/${collabCodeDialogClub.id}`, { collabCode: collabCodeInput.trim() || null });
+      const data = await res.json();
+      if (!res.ok) { toast.error(data.error ?? 'Failed to update collab code'); return; }
+      updateClub(collabCodeDialogClub.id, { collabCode: collabCodeInput.trim() || undefined });
+      toast.success(collabCodeInput.trim() ? `Collab code set to "${collabCodeInput.trim()}"` : 'Collab code cleared');
+      setCollabCodeDialogClub(null);
+      setCollabCodeInput('');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingCollabCode(false);
+    }
+  };
+
   const renderClubRow = (club: Club) => {
     const eventCount = events.filter(e => e.clubId === club.id).length;
     const isDeleting = deletingId === club.id;
@@ -409,6 +435,15 @@ export function ClubManagement() {
           title={`Change email for ${club.name}`}
         >
           <Mail className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="shrink-0"
+          onClick={() => { setCollabCodeInput(club.collabCode ?? ''); setCollabCodeDialogClub(club); }}
+          title={`Set collab code for ${club.name}${club.collabCode ? ` (current: ${club.collabCode})` : ''}`}
+        >
+          <Tag className="h-4 w-4" />
         </Button>
         <Button
           variant="ghost"
@@ -505,6 +540,13 @@ export function ClubManagement() {
                         <SelectItem value="department">Department</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Input
+                      className="h-8 w-32 text-sm font-mono"
+                      placeholder={req.desired_collab_code ? `${req.desired_collab_code} (requested)` : 'Collab code…'}
+                      value={requestCollabCodes[req.id] ?? req.desired_collab_code ?? ''}
+                      onChange={e => setRequestCollabCodes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                      title="Short collab code — edit before approving if needed"
+                    />
                     <Button
                       size="sm"
                       className=""
@@ -990,6 +1032,45 @@ export function ClubManagement() {
                 <Button variant="outline" onClick={() => { setEmailDialogClub(null); setEmailInput(''); }}>Cancel</Button>
                 <Button onClick={handleChangeEmail} disabled={savingEmail || !emailInput.trim()}>
                   {savingEmail ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Saving…</> : 'Update Email'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Collab code dialog */}
+      <Dialog open={!!collabCodeDialogClub} onOpenChange={open => { if (!open) { setCollabCodeDialogClub(null); setCollabCodeInput(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Set Collab Code — {collabCodeDialogClub?.name}</DialogTitle>
+            <DialogDescription>
+              Club admins can use this short code in Outlook event descriptions as <code className="font-mono text-xs bg-muted px-1 rounded">[collab: CODE]</code> to tag collaborating clubs. Leave blank to clear.
+            </DialogDescription>
+          </DialogHeader>
+          {collabCodeDialogClub && (
+            <div className="space-y-4">
+              {collabCodeDialogClub.collabCode ? (
+                <p className="text-xs text-muted-foreground">Current code: <span className="font-mono font-medium">{collabCodeDialogClub.collabCode}</span></p>
+              ) : (
+                <p className="text-xs text-muted-foreground">No collab code set yet.</p>
+              )}
+              <div>
+                <Label htmlFor="collab-code-input">Collab Code</Label>
+                <Input
+                  id="collab-code-input"
+                  value={collabCodeInput}
+                  onChange={e => setCollabCodeInput(e.target.value)}
+                  placeholder="e.g. MCC, BSU, ASA-ARAB"
+                  className="mt-1 font-mono"
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveCollabCode(); }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Should be short and unique. Club admins type this in Outlook descriptions.</p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setCollabCodeDialogClub(null); setCollabCodeInput(''); }}>Cancel</Button>
+                <Button onClick={handleSaveCollabCode} disabled={savingCollabCode}>
+                  {savingCollabCode ? <><RefreshCw className="h-4 w-4 mr-2 animate-spin" />Saving…</> : 'Save Code'}
                 </Button>
               </div>
             </div>

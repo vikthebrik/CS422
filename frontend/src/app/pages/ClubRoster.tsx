@@ -87,7 +87,7 @@ export function ClubRoster() {
 
     // Build header row dynamically
     const headers: string[] = ['Org Name'];
-    if (includeClubInfo) headers.push('Contact Email', 'Type', 'Description', 'Instagram', 'Linktree', 'Engage');
+    if (includeClubInfo) headers.push('Contact Email', 'Type', 'Collab Code', 'Description', 'Instagram', 'Linktree', 'Engage');
     for (const sec of ALL_SECTIONS) {
       if (includeSections.has(sec)) headers.push(SECTION_LABELS[sec]);
     }
@@ -102,6 +102,7 @@ export function ClubRoster() {
         cells.push(
           esc(c.adminEmail),
           esc(c.orgType === 'department' ? 'Department' : 'Union'),
+          esc(c.collabCode),
           esc(c.description),
           esc(c.instagram),
           esc(c.linktree),
@@ -149,7 +150,7 @@ export function ClubRoster() {
 
     if (search.trim()) {
       const q = search.toLowerCase();
-      return club.name.toLowerCase().includes(q) || (club.description ?? '').toLowerCase().includes(q);
+      return club.name.toLowerCase().includes(q) || (club.description ?? '').toLowerCase().includes(q) || (club.collabCode ?? '').toLowerCase().includes(q);
     }
     return true;
   });

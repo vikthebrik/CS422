@@ -85,7 +85,7 @@ const USE_STEPS = [
   {
     step: '5',
     title: 'Download CSV exports',
-    desc: 'Two CSV downloads are available across the site:\n\n• Org Roster → "Download CSV" — exports a directory of all MCC clubs. A dialog lets you pick which clubs to include and which columns to export: org name, contact email, type (Union/Department), description, Instagram, Linktree, Engage, and team members grouped by section. The file downloads as mcc_clubs_info.csv — useful for outreach, records, or sharing the full club directory.\n\n• Club page → "Download CSV" — exports that club\'s recurring meeting schedule (Day, Time, Location, Notes) as a spreadsheet-ready CSV named after the club.',
+    desc: 'The Org Roster page features a "Download CSV" option that exports a directory of all MCC clubs. A dialog lets you pick which clubs to include and which columns to export: org name, contact email, type (Union/Department), description, Instagram, Linktree, Engage, and team members grouped by section. The file downloads as mcc_clubs_info.csv — useful for outreach, records, or sharing the full club directory.',
   },
   {
     step: '6',
@@ -135,7 +135,7 @@ const OUTLOOK_STEPS = [
   {
     step: '8',
     title: "Co-host events with other MCC clubs",
-    desc: "To show another club as a collaborator on your event, invite one of their members as an attendee in Outlook. The site will automatically create a collaboration request for that club. Once they accept, their club's badge appears on the event listing.You can also add or remove collaborators manually from the event page at any time.",
+    desc: "Add a [collab: X] tag anywhere in your Outlook event description to invite another registered MCC club as a collaborator — where X is their full club name, short collab code (set by the MCC admin), or admin email.\n\nExamples:\n  [collab: Multicultural Center]\n  [collab: MCC]\n  [collab: mcc@uoregon.edu]\n\nThe tag is stripped from the public description so students never see it. When the sync runs, the invited club's admin receives an email notification and can accept or decline from their Collab page. Once accepted, both clubs' badges appear at the top of the event page.\n\nYou can also add or remove collaborators manually from the event page at any time after logging in.",
   },
 ];
 
@@ -444,6 +444,30 @@ export function Developers() {
                 Note: You can also toggle the RSVP flag and add a link + note directly on the event page after logging in via the Hub Admin Dashboard —
                 useful if registration details aren't ready when you create the Outlook event.
               </p>
+
+              <h4 className="font-medium text-sm mt-6 mb-2 text-foreground">3. Inviting Collaborating Clubs</h4>
+              <p className="text-sm text-muted-foreground mb-3">
+                Add a <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">[collab: X]</code> or <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">[c: X]</code> tag
+                anywhere in the Outlook event <strong>description</strong> to invite another registered MCC club as a co-host.
+                The tag is stripped before display — students never see it.
+              </p>
+              <div className="grid sm:grid-cols-3 gap-3 mb-3">
+                {[
+                  { signal: '[collab: Multicultural Center]', how: 'Match by full club name (case-insensitive)' },
+                  { signal: '[collab: MCC]', how: 'Match by short code set by the MCC admin' },
+                  { signal: '[collab: mcc@uoregon.edu]', how: 'Match by the club admin login email' },
+                ].map(({ signal, how }) => (
+                  <div key={signal} className="rounded-lg border border-border bg-muted/30 px-3 py-2">
+                    <code className="font-mono text-xs">{signal}</code>
+                    <p className="text-xs text-muted-foreground mt-0.5">{how}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                On the next sync, the invited club's admin receives an email notification and can accept or decline from their <strong>Collab</strong> page.
+                Once accepted, both clubs' badges appear at the top of the event page. You can also add collaborators manually from the event page after logging in.
+                Short codes are recommended for clubs with long or similar names — the MCC admin sets them in Organization Management.
+              </p>
             </div>
 
             {/* ── Event detail best practices ── */}
@@ -573,6 +597,10 @@ export function Developers() {
               {
                 label: 'Permanent Approvals',
                 detail: "Approved / Rejected event collaboration status takes priority over raw ICS attendee lists.",
+              },
+              {
+                label: '[collab: X] Tag Detection',
+                detail: "The sync engine parses [collab: X] or [c: X] tags from Outlook event descriptions and creates collaboration records automatically. X resolves by club name, admin-assigned short code, or email. A branded email notification is sent to the target club's admin on first detection. Tags are stripped from the stored description.",
               },
             ].map(({ label, detail }) => (
               <div key={label} className="flex gap-3 text-sm">

@@ -73,6 +73,7 @@ interface ApiClub {
     color?: string;
     section_labels?: { exec?: string; board?: string; intern?: string };
     meeting_schedule?: Array<{ day: string; time: string; location: string; notes?: string }>;
+    collab_code?: string;
   } | null;
 }
 
@@ -92,6 +93,7 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
     engage: (apiClub.social_links as any)?.engage ?? undefined,
     adminEmail: apiClub.admin_email ?? undefined,
     contactEmail: (apiClub.social_links as any)?.contact_email ?? undefined,
+    collabCode: apiClub.metadata_tags?.collab_code ?? undefined,
   };
 }
 

@@ -889,10 +889,11 @@ setInterval(updateUptime, 1000);
 // POST /auth/request-account  { clubName, contactEmail, message? }
 // Publicly accessible — lets clubs without an account submit a request.
 app.post('/auth/request-account', async (req, res) => {
-  const { clubName, contactEmail, message } = req.body as {
+  const { clubName, contactEmail, message, desiredCollabCode } = req.body as {
     clubName?: string;
     contactEmail?: string;
     message?: string;
+    desiredCollabCode?: string;
   };
   if (!clubName || !contactEmail) {
     return res.status(400).json({ error: 'clubName and contactEmail are required' });
@@ -904,7 +905,12 @@ app.post('/auth/request-account', async (req, res) => {
 
   const { error } = await supabase
     .from('account_requests')
-    .insert({ club_name: clubName, contact_email: contactEmail, message: message ?? null });
+    .insert({
+      club_name: clubName,
+      contact_email: contactEmail,
+      message: message ?? null,
+      desired_collab_code: desiredCollabCode?.trim() || null,
+    });
 
   if (error) return res.status(500).json({ error: error.message });
   USER_METRICS.accountRequests++;
@@ -1307,7 +1313,7 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels, meetingSchedule } = req.body as {
+  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels, meetingSchedule, collabCode } = req.body as {
     name?: string;
     description?: string;
     instagram?: string;
@@ -1317,6 +1323,7 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     outlookLink?: string;
     sectionLabels?: { exec?: string; board?: string; intern?: string };
     meetingSchedule?: Array<{ day: string; time: string; location: string; notes?: string }> | null;
+    collabCode?: string | null;
   };
 
   try {
@@ -1340,12 +1347,16 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       if (!name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
       updates.name = name.trim();
     }
-    if (description !== undefined || sectionLabels !== undefined || meetingSchedule !== undefined) {
+    if (description !== undefined || sectionLabels !== undefined || meetingSchedule !== undefined || collabCode !== undefined) {
+      if (collabCode !== undefined && req.userRole !== 'root') {
+        return res.status(403).json({ error: 'Only root admin can set the collab code' });
+      }
       updates.metadata_tags = {
         ...currentMeta,
         ...(description !== undefined ? { description } : {}),
         ...(sectionLabels !== undefined ? { section_labels: sectionLabels } : {}),
         ...(meetingSchedule !== undefined ? { meeting_schedule: meetingSchedule ?? null } : {}),
+        ...(collabCode !== undefined ? { collab_code: collabCode?.trim() || null } : {}),
       };
     }
     if (instagram !== undefined || linktree !== undefined || engage !== undefined || contactEmail !== undefined) {
@@ -1573,7 +1584,7 @@ app.delete('/clubs/:id', requireRoot, async (req: AuthenticatedRequest, res) => 
 app.get('/admin/requests', requireRoot, async (_req, res) => {
   const { data, error } = await supabase
     .from('account_requests')
-    .select('id, club_name, contact_email, message, status, created_at')
+    .select('id, club_name, contact_email, message, desired_collab_code, status, created_at')
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
@@ -1587,11 +1598,11 @@ app.get('/admin/requests', requireRoot, async (_req, res) => {
 // ---------------------------------------------------------------------------
 app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRequest, res) => {
   const requestId = req.params.id as string;
-  const { orgType = 'union' } = req.body as { orgType?: string };
+  const { orgType = 'union', collabCode } = req.body as { orgType?: string; collabCode?: string };
 
   const { data: request, error: fetchErr } = await supabase
     .from('account_requests')
-    .select('id, club_name, contact_email, status')
+    .select('id, club_name, contact_email, status, desired_collab_code')
     .eq('id', requestId)
     .single();
 
@@ -1624,10 +1635,15 @@ app.post('/admin/requests/:id/approve', requireRoot, async (req: AuthenticatedRe
     '!2';
 
   try {
-    // 1. Create club
+    // 1. Create club (apply admin-edited collab code if provided, else fall back to desired)
+    const finalCollabCode = (collabCode ?? (request as any).desired_collab_code ?? '').trim() || null;
     const { data: club, error: clubErr } = await supabase
       .from('clubs')
-      .insert({ name: clubName, org_type: orgType })
+      .insert({
+        name: clubName,
+        org_type: orgType,
+        ...(finalCollabCode ? { metadata_tags: { collab_code: finalCollabCode } } : {}),
+      })
       .select('id, name')
       .single();
 

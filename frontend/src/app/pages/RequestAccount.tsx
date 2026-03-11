@@ -22,6 +22,7 @@ export function RequestAccount() {
   const [clubName, setClubName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [message, setMessage] = useState('');
+  const [desiredCollabCode, setDesiredCollabCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -36,7 +37,7 @@ export function RequestAccount() {
       const res = await fetch(`${API_BASE}/auth/request-account`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clubName, contactEmail, message }),
+        body: JSON.stringify({ clubName, contactEmail, message, desiredCollabCode: desiredCollabCode.trim() || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -112,6 +113,19 @@ export function RequestAccount() {
               />
               <p className="text-xs text-muted-foreground mt-1">
                 Your credentials will be sent here once approved.
+              </p>
+            </div>
+            <div>
+              <Label htmlFor="desiredCollabCode">Preferred short code <span className="font-normal text-muted-foreground">(optional)</span></Label>
+              <Input
+                id="desiredCollabCode"
+                value={desiredCollabCode}
+                onChange={e => setDesiredCollabCode(e.target.value)}
+                placeholder="e.g. BSU, APASU, MEChA"
+                className="font-mono"
+              />
+              <p className="text-xs text-muted-foreground mt-1">
+                Used by other clubs to tag you in collaborative events. The MCC admin may adjust it before approval.
               </p>
             </div>
             <div>

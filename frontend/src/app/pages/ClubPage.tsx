@@ -372,11 +372,16 @@ export function ClubPage() {
             <div className="flex-1">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <CardTitle className="text-3xl">{club.name}</CardTitle>
                     <Badge variant="secondary">
                       {club.orgType === 'department' ? 'Department' : 'Union'}
                     </Badge>
+                    {club.collabCode && (
+                      <Badge variant="outline" className="font-mono text-xs text-muted-foreground">
+                        collab: {club.collabCode}
+                      </Badge>
+                    )}
                   </div>
                   <CardDescription className="text-base">
                     {club.description || 'Student organization at the University of Oregon'}

@@ -204,7 +204,7 @@ export function EventPage() {
         <CardHeader>
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 <Badge variant="secondary">{event.eventType}</Badge>
                 <Badge
                   className="text-white"
@@ -213,6 +213,27 @@ export function EventPage() {
                   <Users className="h-3 w-3 mr-1" />
                   {club.name}
                 </Badge>
+                {event.collaborators && event.collaborators.filter(c => c.club_id !== event.clubId).length > 0 && (
+                  <>
+                    <span className="text-muted-foreground text-xs">·</span>
+                    <span className="text-xs text-muted-foreground font-medium">with</span>
+                    {event.collaborators.filter(c => c.club_id !== event.clubId).map(collab => {
+                      const collabClub = clubs.find(c => c.id === collab.club_id);
+                      if (!collabClub) return null;
+                      return (
+                        <Badge
+                          key={collab.club_id}
+                          className="text-white cursor-pointer hover:opacity-80 transition-opacity"
+                          style={{ backgroundColor: collabClub.color }}
+                          onClick={() => navigate(`/club/${collab.club_id}`)}
+                        >
+                          <Users className="h-3 w-3 mr-1" />
+                          {collabClub.name}
+                        </Badge>
+                      );
+                    })}
+                  </>
+                )}
               </div>
               <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
             </div>

@@ -2,9 +2,67 @@ import { supabase } from '../db/supabase';
 import nodeIcal from 'node-ical';
 import path from 'path';
 import dotenv from 'dotenv';
+import { Resend } from 'resend';
 
 // Load env vars explicitly if running as script, though supabase.ts also does it.
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+
+function buildCollabInviteEmail(recipientClubName: string, hostClubName: string, eventTitle: string, eventUrl: string): string {
+    const collabUrl = `${eventUrl.split('/event/')[0]}/collab`;
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collaboration Invite</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="100%" style="max-width:520px;background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="background-color:#004F35;padding:32px;text-align:center;">
+              <img src="https://www.uomcc.org/assets/Looking%20Down.png" alt="" style="height:64px;width:64px;object-fit:contain;display:block;margin:0 auto 12px;" />
+              <div style="color:#ffffff;font-size:20px;font-weight:600;">MCC Calendar Hub</div>
+              <div style="color:rgba(255,255,255,0.7);font-size:12px;margin-top:4px;">University of Oregon Multicultural Center</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px 32px;text-align:center;">
+              <h2 style="margin:0 0 12px;font-size:22px;color:#111827;font-weight:600;">Collaboration Invite</h2>
+              <p style="margin:0 0 28px;font-size:15px;color:#6b7280;line-height:1.6;">
+                <strong style="color:#111827;">${hostClubName}</strong> has invited
+                <strong style="color:#111827;">${recipientClubName}</strong> to collaborate on an upcoming event.
+              </p>
+              <div style="background-color:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:16px 20px;margin-bottom:28px;text-align:left;">
+                <div style="font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">Event</div>
+                <div style="font-size:16px;font-weight:600;color:#111827;">${eventTitle}</div>
+              </div>
+              <a href="${collabUrl}" style="display:inline-block;background-color:#004F35;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:14px 32px;border-radius:8px;">
+                Accept or Decline &rarr;
+              </a>
+              <p style="margin:24px 0 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+                Once accepted, your club's badge will appear alongside the host on the event page.
+                You can also <a href="${eventUrl}" style="color:#004F35;text-decoration:none;">view the event</a> directly.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="border-top:1px solid #e5e7eb;padding:20px 32px;text-align:center;">
+              <p style="margin:0;font-size:12px;color:#9ca3af;">
+                MCC Calendar Hub &middot; University of Oregon<br>
+                <a href="https://www.uomcc.org" style="color:#004F35;text-decoration:none;">uomcc.org</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
 
 export async function populate(clubName: string, icsUrl: string) {
     console.log(`Starting population for club: ${clubName}`);
@@ -72,6 +130,19 @@ export async function populate(clubName: string, icsUrl: string) {
             }
         });
 
+        // Pre-fetch clubs for [collab: X] tag resolution (name and code lookup)
+        const { data: allClubs } = await supabase
+            .from('clubs')
+            .select('id, name, metadata_tags');
+
+        const clubNameToId: Record<string, string> = {};
+        const clubCodeToId: Record<string, string> = {};
+        allClubs?.forEach((c: any) => {
+            clubNameToId[c.name.toLowerCase()] = c.id;
+            const code = c.metadata_tags?.collab_code;
+            if (code) clubCodeToId[(code as string).toLowerCase()] = c.id;
+        });
+
         const parseAttendees = (evt: any): Array<{ email: string; partstat: string }> => {
             const raw = evt.attendee;
             if (!raw) return [];
@@ -96,6 +167,79 @@ export async function populate(clubName: string, icsUrl: string) {
                         { onConflict: 'event_id,club_id', ignoreDuplicates: true });
                 if (ce) console.error(`Failed to upsert attendee collab:`, ce);
                 else collabCount++;
+            }
+        };
+
+        // Parse [collab: X] or [c: X] tags from description text.
+        // X may be a club name, short collab code, or email address.
+        const parseCollabTags = (text: string): string[] => {
+            const matches = [...text.matchAll(/\[(?:collab|c):\s*([^\]]+)\]/gi)];
+            return matches.map(m => m[1].trim()).filter(Boolean);
+        };
+
+        // Resolve a tag value to a club_id. Priority: name → collab code → email.
+        const resolveCollabTag = (tag: string): string | null => {
+            const lower = tag.toLowerCase();
+            return clubNameToId[lower] ?? clubCodeToId[lower] ?? emailToClubId[lower] ?? null;
+        };
+
+        const sendCollabInviteEmail = async (
+            targetClubId: string,
+            targetClubName: string,
+            eventTitle: string,
+            hostClubName: string,
+            eventId: string,
+        ) => {
+            if (!process.env.RESEND_API_KEY) return;
+            const adminEmails = clubIdToEmails[targetClubId] ?? [];
+            if (adminEmails.length === 0) return;
+            const frontendUrl = process.env.FRONTEND_URL ?? 'https://mcc.uomcc.org';
+            const eventUrl = `${frontendUrl}/event/${eventId}`;
+            try {
+                const resend = new Resend(process.env.RESEND_API_KEY);
+                await resend.emails.send({
+                    from: process.env.SMTP_FROM ?? 'MCC Calendar Hub <noreply@uomcc.org>',
+                    to: adminEmails[0],
+                    subject: `[MCC] Collaboration invite: ${eventTitle}`,
+                    html: buildCollabInviteEmail(targetClubName, hostClubName, eventTitle, eventUrl),
+                });
+                console.log(`Sent collab invite email to ${adminEmails[0]} for "${eventTitle}"`);
+            } catch (err: any) {
+                console.error(`Failed to send collab invite email to ${adminEmails[0]}:`, err.message);
+            }
+        };
+
+        // Create collab records from [collab: X] tags. Only inserts if no record
+        // already exists — preserves any manually-set accept/reject status.
+        // Sends an email notification to the target club's admin on first detection.
+        const upsertCollabTagCollabs = async (eventId: string, tags: string[], eventTitle: string) => {
+            for (const tag of tags) {
+                const targetClubId = resolveCollabTag(tag);
+                if (!targetClubId || targetClubId === club.id) {
+                    if (!targetClubId) console.warn(`[collab tag] No club found for "${tag}" — skipping`);
+                    continue;
+                }
+                const { data: existing } = await supabase
+                    .from('collaborations')
+                    .select('id')
+                    .eq('event_id', eventId)
+                    .eq('club_id', targetClubId)
+                    .maybeSingle();
+                if (!existing) {
+                    const { error } = await supabase.from('collaborations').insert({
+                        event_id: eventId,
+                        club_id: targetClubId,
+                        role: 'secondary',
+                        status: 'pending',
+                    });
+                    if (error) {
+                        console.error(`Failed to create tag-based collab for "${tag}":`, error);
+                    } else {
+                        collabCount++;
+                        const targetName = allClubs?.find((c: any) => c.id === targetClubId)?.name ?? tag;
+                        await sendCollabInviteEmail(targetClubId, targetName, eventTitle, club.name, eventId);
+                    }
+                }
             }
         };
 
@@ -193,7 +337,11 @@ export async function populate(clubName: string, icsUrl: string) {
                       .replace(/\[(?:e|event|m|meeting|oh|office\s*hours|o|other|t|ticket)\]\s*/gi, '')
                       .trim();
                     const rawDescription = event.description || '';
-                    const description = cleanDescription(rawDescription);
+                    // Parse collab tags before stripping them from the stored description
+                    const collabTags = parseCollabTags(rawDescription);
+                    const description = cleanDescription(rawDescription)
+                        .replace(/\[(?:collab|c):\s*[^\]]+\]/gi, '')
+                        .trim();
                     const location = event.location || '';
                     const typeId = classifyEvent(rawTitle, description);
                     const rsvpInfo = checkRsvp(rawTitle, description);
@@ -250,6 +398,7 @@ export async function populate(clubName: string, icsUrl: string) {
                             }
                             processedCount++;
                             await upsertAttendeeCollabs(existingEvent.id, attendees);
+                            await upsertCollabTagCollabs(existingEvent.id, collabTags, title);
 
                         } else {
                             // It belongs to ANOTHER club. This is a COLLABORATION.
@@ -294,8 +443,9 @@ export async function populate(clubName: string, icsUrl: string) {
                         if (insertError) console.error(`Failed to insert event ${uid}:`, insertError);
                         else {
                             processedCount++;
-                            // Process attendees so invited clubs get collaboration records
+                            // Process attendees and [collab: X] tags so invited clubs get collaboration records
                             await upsertAttendeeCollabs(newEvent.id, attendees);
+                            await upsertCollabTagCollabs(newEvent.id, collabTags, title);
                         }
                     }
                 }
