@@ -12,8 +12,11 @@
         "seed": "ts-node src/scripts/seed_auth.ts"
     },
     "keywords": [],
-    "author": "",
-    "license": "ISC",
+    "author": "MCC Calendar Hub Contributors",
+    "license": "CC-BY-NC-4.0",
+    "engines": {
+        "node": ">=18"
+    },
     "dependencies": {
         "@supabase/supabase-js": "^2.39.3",
         "@types/bcrypt": "^6.0.0",

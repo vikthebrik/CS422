@@ -5,7 +5,7 @@ Thank you for your interest in contributing!
 ## Getting Started
 
 1. Fork the repository and clone your fork.
-2. Follow the [Quick Start](README.md#quick-start-local-development) in the README to get your local environment running.
+2. Run `./setup.sh` (or `bash setup.sh`) to install dependencies and create `.env` files from the examples. Then fill in the required values as directed by the script.
 3. Create a branch from `main` using the format `type/short-description`:
    - `fix/event-sync-crash`
    - `feat/rsvp-export`
