@@ -51,6 +51,7 @@ interface ApiEvent {
   rsvp_link: string | null;
   rsvp_note?: string | null;
   manually_edited?: boolean | null;
+  synced?: boolean | null;
 }
 
 function mapApiEvent(
@@ -71,6 +72,7 @@ function mapApiEvent(
     rsvpLink: apiEvent.rsvp_link ?? null,
     rsvpNote: apiEvent.rsvp_note ?? null,
     manuallyEdited: apiEvent.manually_edited ?? false,
+    synced: (apiEvent as any).synced ?? false,
     collaborators: apiEvent.collaborators ?? [],
   };
 }

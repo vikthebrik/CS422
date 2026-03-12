@@ -368,7 +368,7 @@ export async function populate(clubName: string, icsUrl: string) {
                     // This handles "duplicate events flagged" by UID.
                     const { data: existingEvents, error: fetchError } = await supabase
                         .from('events')
-                        .select('id, club_id, manually_edited')
+                        .select('id, club_id, manually_edited, manually_deleted')
                         .eq('uid', uid);
 
                     if (fetchError) {
@@ -377,6 +377,14 @@ export async function populate(clubName: string, icsUrl: string) {
                     }
 
                     const existingEvent = existingEvents && existingEvents.length > 0 ? existingEvents[0] : null;
+
+                    // If an admin deleted this synced event, honour that decision —
+                    // do not re-add it. Still track uid so the prune step doesn't
+                    // attempt a redundant delete while the feed still lists the event.
+                    if (existingEvent?.manually_deleted) {
+                        processedUids.push(uid);
+                        continue;
+                    }
 
                     const attendees = parseAttendees(event);
 

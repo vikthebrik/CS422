@@ -1010,6 +1010,7 @@ app.get('/events', async (_req, res) => {
           clubs ( name, logo_url )
         )
       `)
+      .eq('manually_deleted', false)
       .order('start_time', { ascending: true });
 
     if (error) throw error;
@@ -1019,6 +1020,7 @@ app.get('/events', async (_req, res) => {
       club_name: event.clubs?.name,
       club_logo: event.clubs?.logo_url,
       type: event.event_types?.name ?? 'Other',
+      synced: !event.uid?.startsWith('manual-'),
       collaborators: (event.collaborations ?? [])
         .filter((c: any) => c.status === 'accepted')
         .map((c: any) => ({ club_id: c.club_id, club_name: c.clubs?.name, club_logo: c.clubs?.logo_url }))
@@ -1184,23 +1186,30 @@ app.delete('/events/:id', requireAuth, async (req: AuthenticatedRequest, res) =>
   const { id } = req.params;
 
   try {
-    if (req.userRole === 'club_admin') {
-      const { data: existing } = await supabase
-        .from('events')
-        .select('club_id')
-        .eq('id', id)
-        .single();
+    const { data: target } = await supabase
+      .from('events')
+      .select('club_id, uid')
+      .eq('id', id)
+      .single();
 
-      if (!existing || existing.club_id !== req.userClubId) {
-        return res.status(403).json({ error: 'You can only delete your own club\'s events' });
-      }
+    if (!target) return res.status(404).json({ error: 'Event not found' });
+
+    if (req.userRole === 'club_admin' && target.club_id !== req.userClubId) {
+      return res.status(403).json({ error: 'You can only delete your own club\'s events' });
     }
 
-    const { error } = await supabase.from('events').delete().eq('id', id);
-    if (error) throw error;
+    const isSynced = !target.uid?.startsWith('manual-');
+
+    if (isSynced) {
+      const { error } = await supabase.from('events').update({ manually_deleted: true }).eq('id', id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw error;
+    }
 
     clearCacheKey('events:all');
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', type: isSynced ? 'soft' : 'hard' });
   } catch (err: any) {
     console.error('Error deleting event:', err);
     res.status(500).json({ error: err.message });

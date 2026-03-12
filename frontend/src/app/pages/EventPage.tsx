@@ -24,7 +24,7 @@
  * | Remove collaborator | DELETE /events/:id/collaborators/:cid | updateEvent() |
  */
 import { useParams, useNavigate } from 'react-router';
-import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus, AlertCircle, RefreshCw } from 'lucide-react';
+import { Calendar, Clock, MapPin, Users, Pencil, ArrowLeft, Ticket, X, Plus, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -45,7 +45,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function EventPage() {
   const { eventId } = useParams();
-  const { events, clubs, currentUser, authToken, updateEvent } = useApp();
+  const { events, clubs, currentUser, authToken, updateEvent, deleteEvent } = useApp();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [localCollabs, setLocalCollabs] = useState<CollaboratorInfo[]>([]);
@@ -57,6 +57,8 @@ export function EventPage() {
   const [editingRsvpLink, setEditingRsvpLink] = useState('');
   const [editingRsvpNote, setEditingRsvpNote] = useState('');
   const [resumingSyncId, setResumingSyncId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const event = events.find(e => e.id === eventId);
   const club = event ? clubs.find(c => c.id === event.clubId) : null;
@@ -98,6 +100,34 @@ export function EventPage() {
       toast.error('Could not resume auto-sync');
     } finally {
       setResumingSyncId(null);
+    }
+  };
+
+  const handleDeleteEvent = async () => {
+    if (!event) return;
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`${API_BASE}/events/${event.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? 'Failed to delete event');
+      }
+      const data = await res.json();
+      deleteEvent(event.id);
+      setIsDeleteDialogOpen(false);
+      if (data.type === 'soft') {
+        toast.success('Event hidden — remove from Outlook to delete permanently');
+      } else {
+        toast.success('Event deleted');
+      }
+      navigate(-1);
+    } catch (err: any) {
+      toast.error(err.message ?? 'Could not delete event');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -238,10 +268,15 @@ export function EventPage() {
               <CardTitle className="text-3xl mb-2">{event.title}</CardTitle>
             </div>
             {canEdit && (
-              <Button onClick={openEditModal} className="bg-primary shrink-0">
-                <Pencil className="h-4 w-4 mr-2" />
-                Edit Event
-              </Button>
+              <div className="flex gap-2 shrink-0">
+                <Button onClick={openEditModal} className="bg-primary">
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Event
+                </Button>
+                <Button variant="outline" onClick={() => setIsDeleteDialogOpen(true)} className="border-red-300 text-red-600 hover:bg-red-50 hover:border-red-400 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             )}
           </div>
         </CardHeader>
@@ -575,6 +610,33 @@ export function EventPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Event</DialogTitle>
+            <DialogDescription>
+              {event.synced
+                ? 'This event syncs from Outlook. Deleting it here hides it immediately and prevents it from re-syncing, but to remove it permanently you should also delete it from your Outlook calendar.'
+                : 'This event was created manually. Deleting it is permanent and cannot be undone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteEvent}
+              disabled={isDeleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {isDeleting ? 'Deleting…' : 'Delete Event'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

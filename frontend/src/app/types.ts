@@ -43,6 +43,7 @@ export interface Event {
   rsvpLink?: string | null;
   rsvpNote?: string | null;
   manuallyEdited?: boolean;
+  synced?: boolean;
   collaborators?: CollaboratorInfo[];
 }
 
