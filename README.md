@@ -13,7 +13,7 @@ A calendar aggregator for [University of Oregon Multicultural Center (MCC)](http
 
 | Service | URL |
 |---------|-----|
-| Frontend (Vercel) | _configured per deployment — see `FRONTEND_URL` env var_ |
+| Frontend (Vercel) | configured per deployment — 'https://uomcc.org' |
 | API (Render) | `https://mcc-scheduler-api.onrender.com` |
 
 ## Monorepo Layout
