@@ -36,7 +36,7 @@ import { FilterSidebar } from './FilterSidebar';
 import { EventReminderPopup } from './EventReminderPopup';
 import { BugReportModal } from './BugReportModal';
 import { AnnouncementBanner } from './AnnouncementBanner';
-import { Calendar, Users, BookOpen, Building2, Info, Code2, Bug, Megaphone } from 'lucide-react';
+import { Calendar, Users, BookOpen, Building2, Info, Code2, Bug, Megaphone, UtensilsCrossed } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { Toaster } from './ui/sonner';
 
@@ -68,6 +68,7 @@ export function Layout() {
     { name: 'Usage Guide', href: '/developers', icon: Code2, public: true },
     { name: 'Announce', href: '/announcements', icon: Megaphone, roles: ['admin'] },
     { name: 'Issues', href: '/bug-reports', icon: Bug, roles: ['admin'] },
+    { name: 'Vendors', href: 'https://zelukai.github.io/ASUO-Vendor-Resource.github.io/', icon: UtensilsCrossed, public: true, external: true },
   ];
 
   const visibleNavigation = navigation.filter(item =>
@@ -100,18 +101,15 @@ export function Layout() {
                 <nav className="flex">
                   {visibleNavigation.map((item) => {
                     const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.name}
-                        to={item.href}
-                        className={`
-                          flex flex-1 sm:flex-none items-center justify-center sm:justify-start gap-2 px-2 sm:px-4 py-3 border-b-2 transition-colors
-                          ${isActive(item.href)
-                            ? 'border-accent text-primary font-medium'
-                            : 'border-transparent text-muted-foreground hover:text-foreground hover:border-accent/40'
-                          }
-                        `}
-                      >
+                    const tabClass = `
+                      flex flex-1 sm:flex-none items-center justify-center sm:justify-start gap-2 px-2 sm:px-4 py-3 border-b-2 transition-colors
+                      ${!item.external && isActive(item.href)
+                        ? 'border-accent text-primary font-medium'
+                        : 'border-transparent text-muted-foreground hover:text-foreground hover:border-accent/40'
+                      }
+                    `;
+                    const inner = (
+                      <>
                         <Icon className="h-4 w-4 shrink-0" />
                         <span className="hidden sm:inline whitespace-nowrap">{item.name}</span>
                         {item.href === '/bug-reports' && openBugCount > 0 && (
@@ -119,6 +117,25 @@ export function Layout() {
                             {openBugCount > 99 ? '99+' : openBugCount}
                           </span>
                         )}
+                      </>
+                    );
+                    return item.external ? (
+                      <a
+                        key={item.name}
+                        href={item.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={tabClass}
+                      >
+                        {inner}
+                      </a>
+                    ) : (
+                      <Link
+                        key={item.name}
+                        to={item.href}
+                        className={tabClass}
+                      >
+                        {inner}
                       </Link>
                     );
                   })}
