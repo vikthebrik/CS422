@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-04-29
+
+### Added
+- External Vendors link to the main navigation menu
+- Soft-delete functionality for synced events, including proper handling for manual deletions
+
+### Changed
+- Updated the Frontend URL documentation in the README
+- Committed lockfiles to ensure reproducible builds and improve CI caching
+- Updated `node-ical` dependency
+
+### Fixed
+- Restored `uomcc.org` domains in allowed origins for CORS configuration
+- Resolved TypeScript warnings in the `populate_supabase` script
+
 ## [1.0.0] - 2026-03-11
 
 ### Added
