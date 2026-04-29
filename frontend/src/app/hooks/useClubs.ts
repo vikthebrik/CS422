@@ -32,7 +32,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Club } from '../types';
+import { Club, ClubSectionConfig } from '../types';
 
 // Deterministic color palette for clubs — muted, analog pastels
 // Each is distinct enough to tell apart while staying calm on the page.
@@ -74,6 +74,7 @@ interface ApiClub {
     section_labels?: { exec?: string; board?: string; intern?: string };
     meeting_schedule?: Array<{ day: string; time: string; location: string; notes?: string }>;
     collab_code?: string;
+    section_config?: Array<{ id: string; visible: boolean }>;
   } | null;
 }
 
@@ -94,6 +95,7 @@ function mapApiClub(apiClub: ApiClub, index: number): Club {
     adminEmail: apiClub.admin_email ?? undefined,
     contactEmail: (apiClub.social_links as any)?.contact_email ?? undefined,
     collabCode: apiClub.metadata_tags?.collab_code ?? undefined,
+    sectionConfig: apiClub.metadata_tags?.section_config as ClubSectionConfig[] | undefined ?? undefined,
   };
 }
 

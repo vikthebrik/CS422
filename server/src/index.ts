@@ -1358,7 +1358,7 @@ app.patch('/admin/clubs/:id/email', requireRoot, async (req: AuthenticatedReques
 // ---------------------------------------------------------------------------
 app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
   const { id } = req.params;
-  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels, meetingSchedule, collabCode } = req.body as {
+  const { name, description, instagram, linktree, engage, contactEmail, outlookLink, sectionLabels, meetingSchedule, collabCode, sectionConfig } = req.body as {
     name?: string;
     description?: string;
     instagram?: string;
@@ -1369,6 +1369,7 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
     sectionLabels?: { exec?: string; board?: string; intern?: string };
     meetingSchedule?: Array<{ day: string; time: string; location: string; notes?: string }> | null;
     collabCode?: string | null;
+    sectionConfig?: Array<{ id: string; visible: boolean }> | null;
   };
 
   try {
@@ -1392,7 +1393,7 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
       if (!name.trim()) return res.status(400).json({ error: 'name cannot be empty' });
       updates.name = name.trim();
     }
-    if (description !== undefined || sectionLabels !== undefined || meetingSchedule !== undefined || collabCode !== undefined) {
+    if (description !== undefined || sectionLabels !== undefined || meetingSchedule !== undefined || collabCode !== undefined || sectionConfig !== undefined) {
       if (collabCode !== undefined && req.userRole !== 'root') {
         return res.status(403).json({ error: 'Only root admin can set the collab code' });
       }
@@ -1402,6 +1403,7 @@ app.patch('/clubs/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
         ...(sectionLabels !== undefined ? { section_labels: sectionLabels } : {}),
         ...(meetingSchedule !== undefined ? { meeting_schedule: meetingSchedule ?? null } : {}),
         ...(collabCode !== undefined ? { collab_code: collabCode?.trim() || null } : {}),
+        ...(sectionConfig !== undefined ? { section_config: sectionConfig ?? null } : {}),
       };
     }
     if (instagram !== undefined || linktree !== undefined || engage !== undefined || contactEmail !== undefined) {
@@ -2148,6 +2150,172 @@ app.post('/clubs/:id/members/:memberId/photo', requireAuth, async (req: Authenti
     .single();
   if (updateError) return res.status(500).json({ error: updateError.message });
   res.json({ photo_url: publicUrl, member: data });
+});
+
+// ---------------------------------------------------------------------------
+// Office Hours — recurring weekly slot templates + per-week exceptions
+// ---------------------------------------------------------------------------
+
+// GET /clubs/:id/office-hours — public
+app.get('/clubs/:id/office-hours', async (req, res) => {
+  const { id } = req.params;
+  const { data: slots, error: sErr } = await supabase
+    .from('office_hours')
+    .select('*')
+    .eq('club_id', id)
+    .order('day_of_week')
+    .order('start_time');
+  if (sErr) return res.status(500).json({ error: sErr.message });
+
+  const slotIds = (slots ?? []).map((s: { id: string }) => s.id);
+  let exceptions: unknown[] = [];
+  if (slotIds.length > 0) {
+    const { data: exc, error: eErr } = await supabase
+      .from('office_hour_exceptions')
+      .select('*')
+      .in('slot_id', slotIds);
+    if (eErr) return res.status(500).json({ error: eErr.message });
+    exceptions = exc ?? [];
+  }
+
+  res.json({ slots: slots ?? [], exceptions });
+});
+
+// POST /clubs/:id/office-hours — requireAuth + club-scoped
+app.post('/clubs/:id/office-hours', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club office hours' });
+  }
+
+  const { day_of_week, start_time, end_time, location, member_ids } = req.body as {
+    day_of_week?: number;
+    start_time?: string;
+    end_time?: string;
+    location?: string;
+    member_ids?: string[];
+  };
+
+  if (day_of_week === undefined || !start_time || !end_time) {
+    return res.status(400).json({ error: 'day_of_week, start_time, and end_time are required' });
+  }
+  if (day_of_week < 1 || day_of_week > 5) {
+    return res.status(400).json({ error: 'day_of_week must be between 1 (Mon) and 5 (Fri)' });
+  }
+  if (end_time <= start_time) {
+    return res.status(400).json({ error: 'end_time must be after start_time' });
+  }
+
+  const { data, error } = await supabase
+    .from('office_hours')
+    .insert({ club_id: id, day_of_week, start_time, end_time, location: location ?? null, member_ids: member_ids ?? [] })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.status(201).json(data);
+});
+
+// PATCH /clubs/:id/office-hours/:slotId — requireAuth + club-scoped
+app.patch('/clubs/:id/office-hours/:slotId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, slotId } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club office hours' });
+  }
+
+  const allowed = ['day_of_week', 'start_time', 'end_time', 'location', 'member_ids', 'active'] as const;
+  const updates: Record<string, unknown> = {};
+  for (const key of allowed) {
+    if (key in req.body) updates[key] = (req.body as Record<string, unknown>)[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'No valid fields to update' });
+  }
+  updates.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('office_hours')
+    .update(updates)
+    .eq('id', slotId)
+    .eq('club_id', id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Office hours slot not found' });
+  res.json(data);
+});
+
+// DELETE /clubs/:id/office-hours/:slotId — requireAuth + club-scoped
+app.delete('/clubs/:id/office-hours/:slotId', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, slotId } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club office hours' });
+  }
+  const { error } = await supabase
+    .from('office_hours')
+    .delete()
+    .eq('id', slotId)
+    .eq('club_id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
+});
+
+// PUT /clubs/:id/office-hours/:slotId/exceptions/:weekOf — upsert a per-week exception
+// weekOf must be an ISO Monday date string (YYYY-MM-DD).
+app.put('/clubs/:id/office-hours/:slotId/exceptions/:weekOf', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, slotId, weekOf } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club office hours' });
+  }
+
+  // Verify the slot belongs to this club
+  const { data: slot } = await supabase
+    .from('office_hours')
+    .select('id')
+    .eq('id', slotId)
+    .eq('club_id', id)
+    .single();
+  if (!slot) return res.status(404).json({ error: 'Office hours slot not found' });
+
+  const { deleted, start_time, end_time, location, member_ids } = req.body as {
+    deleted?: boolean;
+    start_time?: string | null;
+    end_time?: string | null;
+    location?: string | null;
+    member_ids?: string[] | null;
+  };
+
+  const payload: Record<string, unknown> = {
+    slot_id: slotId,
+    week_of: weekOf,
+    deleted: deleted ?? false,
+    start_time: start_time ?? null,
+    end_time: end_time ?? null,
+    location: location ?? null,
+    member_ids: member_ids ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from('office_hour_exceptions')
+    .upsert(payload, { onConflict: 'slot_id,week_of' })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /clubs/:id/office-hours/:slotId/exceptions/:weekOf — restore template defaults
+app.delete('/clubs/:id/office-hours/:slotId/exceptions/:weekOf', requireAuth, async (req: AuthenticatedRequest, res) => {
+  const { id, slotId, weekOf } = req.params;
+  if (req.userRole === 'club_admin' && req.userClubId !== id) {
+    return res.status(403).json({ error: 'You can only manage your own club office hours' });
+  }
+  const { error } = await supabase
+    .from('office_hour_exceptions')
+    .delete()
+    .eq('slot_id', slotId)
+    .eq('week_of', weekOf);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ status: 'ok' });
 });
 
 // ---------------------------------------------------------------------------

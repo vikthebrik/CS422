@@ -36,7 +36,7 @@ import { useApp } from '../context/AppContext';
 
 export function Dashboard() {
   const {
-    events,
+    allEvents,
     selectedClubs,
     selectedEventTypes,
     eventTypeNames,
@@ -50,7 +50,7 @@ export function Dashboard() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const filteredEvents = useMemo(() => {
-    let filtered = events;
+    let filtered = allEvents;
 
     if (selectedClubs.length > 0) {
       filtered = filtered.filter(event =>
@@ -89,7 +89,7 @@ export function Dashboard() {
     }
 
     return filtered;
-  }, [events, selectedClubs, selectedEventTypes, advancedMode, perClubEventTypes, searchQuery, eventTypeNames]);
+  }, [allEvents, selectedClubs, selectedEventTypes, advancedMode, perClubEventTypes, searchQuery, eventTypeNames]);
 
   const handleEventClick = (event: Event) => {
     setSelectedEvent(event);

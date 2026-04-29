@@ -24,7 +24,7 @@
  * | Change email   | PATCH /admin/clubs/:id/email | updateClub()  |
  */
 import { useParams, useNavigate } from 'react-router';
-import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X, Download, Trash2, ExternalLink } from 'lucide-react';
+import { Instagram, Link as LinkIcon, Globe, Calendar, MapPin, Clock, Pencil, Search, ChevronDown, ChevronUp, Ticket, Plus, AlertTriangle, Mail, Copy, Check, X, Download, Trash2, ExternalLink, CalendarClock, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
@@ -40,15 +40,18 @@ import { Textarea } from '../components/ui/textarea';
 import { Switch } from '../components/ui/switch';
 import { LogoUpload } from '../components/LogoUpload';
 import { OurTeam } from '../components/OurTeam';
-import { useState, useMemo } from 'react';
+import { OfficeHoursMiniCalendar } from '../components/OfficeHoursMiniCalendar';
+import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Event, MeetingScheduleEntry } from '../types';
+import { Event, MeetingScheduleEntry, OfficeHourSlot, OfficeHourException, ClubSectionConfig, ClubSectionId } from '../types';
+import { DAY_FULL_NAMES } from '../utils/officeHours';
+import type { ClubMember } from '../components/OurTeam';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 
 export function ClubPage() {
   const { clubId } = useParams();
-  const { clubs, events, currentUser, authToken, updateClub, addEvent, eventTypeNames, loading } = useApp();
+  const { clubs, events, currentUser, authToken, updateClub, addEvent, eventTypeNames, loading, ohData, membersByClub, reloadOhForClub } = useApp();
   const navigate = useNavigate();
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [localSearch, setLocalSearch] = useState('');
@@ -72,6 +75,31 @@ export function ClubPage() {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [scheduleRows, setScheduleRows] = useState<MeetingScheduleEntry[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
+
+  // Office Hours state
+  const [isOhEditorOpen, setIsOhEditorOpen] = useState(false);
+  const [ohSlotForm, setOhSlotForm] = useState<{
+    isOpen: boolean;
+    editingSlot: OfficeHourSlot | null;
+    day: number;
+    startTime: string;
+    endTime: string;
+    location: string;
+    memberIds: string[];
+  }>({ isOpen: false, editingSlot: null, day: 1, startTime: '09:00', endTime: '11:00', location: '', memberIds: [] });
+  const [savingOhSlot, setSavingOhSlot] = useState(false);
+  const [deletingOhSlotId, setDeletingOhSlotId] = useState<string | null>(null);
+  const [ohExcDialog, setOhExcDialog] = useState<{
+    isOpen: boolean;
+    slot: OfficeHourSlot | null;
+    weekOf: string;
+    deleted: boolean;
+    startTime: string;
+    endTime: string;
+    location: string;
+    memberIds: string[];
+  }>({ isOpen: false, slot: null, weekOf: '', deleted: false, startTime: '', endTime: '', location: '', memberIds: [] });
+  const [savingOhExc, setSavingOhExc] = useState(false);
 
   // My page link copy state
   const [pageLinkCopied, setPageLinkCopied] = useState(false);
@@ -150,6 +178,154 @@ export function ClubPage() {
     a.download = `${club.name.replace(/\s+/g, '_')}_meeting_schedule.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // ── Office Hours handlers ──────────────────────────────────────────────────
+
+  const openOhSlotForm = (slot?: OfficeHourSlot, defaultDay?: number) => {
+    setOhSlotForm({
+      isOpen: true,
+      editingSlot: slot ?? null,
+      day: slot?.day_of_week ?? defaultDay ?? 1,
+      startTime: slot?.start_time ?? '09:00',
+      endTime: slot?.end_time ?? '11:00',
+      location: slot?.location ?? '',
+      memberIds: slot?.member_ids ?? [],
+    });
+  };
+
+  const saveOhSlot = async () => {
+    if (!club) return;
+    setSavingOhSlot(true);
+    const { editingSlot, day, startTime, endTime, location, memberIds } = ohSlotForm;
+    const body = { day_of_week: day, start_time: startTime, end_time: endTime, location: location || null, member_ids: memberIds };
+    try {
+      const url = editingSlot
+        ? `${API_BASE}/clubs/${club.id}/office-hours/${editingSlot.id}`
+        : `${API_BASE}/clubs/${club.id}/office-hours`;
+      const res = await fetch(url, {
+        method: editingSlot ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to save'); return; }
+      await reloadOhForClub(club.id);
+      setOhSlotForm(f => ({ ...f, isOpen: false }));
+      toast.success(editingSlot ? 'Office hours updated' : 'Office hours slot added');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingOhSlot(false);
+    }
+  };
+
+  const deleteOhSlot = async (slotId: string) => {
+    if (!club) return;
+    setDeletingOhSlotId(slotId);
+    try {
+      const res = await fetch(`${API_BASE}/clubs/${club.id}/office-hours/${slotId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to delete'); return; }
+      await reloadOhForClub(club.id);
+      toast.success('Office hours slot removed');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setDeletingOhSlotId(null);
+    }
+  };
+
+  const openOhExcDialog = (slot: OfficeHourSlot, weekOf: string, existing: OfficeHourException | null) => {
+    setOhExcDialog({
+      isOpen: true,
+      slot,
+      weekOf,
+      deleted: existing?.deleted ?? false,
+      startTime: existing?.start_time ?? slot.start_time,
+      endTime: existing?.end_time ?? slot.end_time,
+      location: existing?.location ?? slot.location ?? '',
+      memberIds: existing?.member_ids ?? slot.member_ids,
+    });
+  };
+
+  const saveOhException = async () => {
+    if (!club || !ohExcDialog.slot) return;
+    setSavingOhExc(true);
+    const { slot, weekOf, deleted, startTime, endTime, location, memberIds } = ohExcDialog;
+    try {
+      const res = await fetch(`${API_BASE}/clubs/${club.id}/office-hours/${slot.id}/exceptions/${weekOf}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({
+          deleted,
+          start_time: deleted ? null : startTime,
+          end_time: deleted ? null : endTime,
+          location: deleted ? null : (location || null),
+          member_ids: deleted ? null : memberIds,
+        }),
+      });
+      if (!res.ok) { const d = await res.json(); toast.error(d.error ?? 'Failed to save exception'); return; }
+      await reloadOhForClub(club.id);
+      setOhExcDialog(d => ({ ...d, isOpen: false }));
+      toast.success(deleted ? 'Week skipped' : 'Week override saved');
+    } catch {
+      toast.error('Could not reach the server');
+    } finally {
+      setSavingOhExc(false);
+    }
+  };
+
+  // ── OH data derived ────────────────────────────────────────────────────────
+  const ohSlots = clubId ? (ohData[clubId]?.slots ?? []) : [];
+  const ohExceptions = clubId ? (ohData[clubId]?.exceptions ?? []) : [];
+  const ohMembers: ClubMember[] = clubId ? (membersByClub[clubId] ?? []) : [];
+
+  // ── Section ordering & visibility ─────────────────────────────────────────
+  const DEFAULT_SECTIONS: ClubSectionConfig[] = [
+    { id: 'contact', visible: true },
+    { id: 'events', visible: true },
+    { id: 'office-hours', visible: true },
+    { id: 'our-team', visible: true },
+  ];
+
+  const [localSections, setLocalSections] = useState<ClubSectionConfig[]>(
+    () => club?.sectionConfig ?? DEFAULT_SECTIONS
+  );
+
+  // Keep in sync if club data loads after initial render
+  useEffect(() => {
+    if (club) setLocalSections(club.sectionConfig ?? DEFAULT_SECTIONS);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [club?.id]);
+
+  const saveSectionConfig = async (newSections: ClubSectionConfig[]) => {
+    if (!club) return;
+    setLocalSections(newSections);
+    updateClub(club.id, { sectionConfig: newSections });
+    try {
+      await fetch(`${API_BASE}/clubs/${club.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ sectionConfig: newSections }),
+      });
+    } catch {
+      // Silently fail — local state already updated optimistically
+    }
+  };
+
+  const moveSection = (idx: number, dir: -1 | 1) => {
+    const next = [...localSections];
+    const target = idx + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[idx], next[target]] = [next[target], next[idx]];
+    saveSectionConfig(next);
+  };
+
+  const toggleSection = (id: ClubSectionId) => {
+    const next = localSections.map(s => s.id === id ? { ...s, visible: !s.visible } : s);
+    saveSectionConfig(next);
   };
 
   const allUpcoming = clubId ? getUpcomingClubEvents(events, clubId) : [];
@@ -351,377 +527,416 @@ export function ClubPage() {
         ← Back to Club Roster
       </Button>
 
-      {/* Club Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row gap-6">
-            <div
-              className="w-24 h-24 rounded-lg flex items-center justify-center text-white shrink-0"
-              style={{ backgroundColor: club.color }}
-            >
-              {club.logo ? (
-                <ImageWithFallback
-                  src={club.logo}
-                  alt={`${club.name} logo`}
-                  className="w-full h-full object-cover rounded-lg"
-                />
-              ) : (
-                <span className="text-4xl">{club.name.substring(0, 2)}</span>
-              )}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <CardTitle className="text-3xl">{club.name}</CardTitle>
-                    <Badge variant="secondary">
-                      {club.orgType === 'department' ? 'Department' : 'Union'}
-                    </Badge>
-                    {club.collabCode && (
-                      <Badge variant="outline" className="font-mono text-xs text-muted-foreground">
-                        collab: {club.collabCode}
-                      </Badge>
-                    )}
-                  </div>
-                  <CardDescription className="text-base">
-                    {club.description || 'Student organization at the University of Oregon'}
-                  </CardDescription>
-                </div>
-                {canEdit && (
-                  <Button onClick={() => setIsEditModalOpen(true)} variant="outline" size="sm">
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Edit Organization Info
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Contact email — visible to all, editable by root */}
-          {((club.contactEmail || club.adminEmail) || currentUser?.role === 'admin') && (
-            <div className="flex items-center gap-2">
-              <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-              {editingEmail ? (
-                <div className="flex items-center gap-2 flex-1">
-                  <input
-                    className="flex-1 border border-border rounded px-2 py-1 text-sm font-mono"
-                    value={emailInput}
-                    onChange={e => setEmailInput(e.target.value)}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') saveEmail();
-                      if (e.key === 'Escape') setEditingEmail(false);
-                    }}
-                    autoFocus
-                    type="email"
-                  />
-                  <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
-                    {savingEmail ? 'Saving…' : 'Save'}
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setEditingEmail(false)}>
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  {(club.contactEmail || club.adminEmail) ? (
-                    <button
-                      type="button"
-                      onClick={copyEmail}
-                      className="inline-flex items-center gap-1.5 text-sm font-mono hover:text-primary transition-colors"
-                      title="Click to copy"
-                    >
-                      {club.contactEmail || club.adminEmail}
-                      {emailCopied
-                        ? <Check className="h-3.5 w-3.5 text-green-500" />
-                        : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
-                    </button>
-                  ) : (
-                    <span className="text-sm text-muted-foreground italic">No email set</span>
-                  )}
-                  {currentUser?.role === 'admin' && (
-                    <button
-                      type="button"
-                      onClick={() => { setEmailInput(club.contactEmail ?? club.adminEmail ?? ''); setEditingEmail(true); }}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                      title="Edit email"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+      {/* Dynamically ordered + togglable sections */}
+      {localSections.map((section, idx) => {
+        const isFirst = idx === 0;
+        const isLast = idx === localSections.length - 1;
+        const isHidden = !section.visible;
 
-          <div className="flex flex-wrap gap-3">
-            {club.instagram && (
-              <a
-                href={club.instagram}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
-              >
-                <Instagram className="h-4 w-4" />
-                <span className="text-sm">Instagram</span>
-              </a>
-            )}
-            {club.linktree && (
-              <a
-                href={club.linktree}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
-              >
-                <LinkIcon className="h-4 w-4" />
-                <span className="text-sm">Linktree</span>
-              </a>
-            )}
-            {club.engage && (
-              <a
-                href={club.engage}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors"
-              >
-                <Globe className="h-4 w-4" />
-                <span className="text-sm">Engage</span>
-              </a>
-            )}
-          </div>
+        // Non-admins never see hidden sections
+        if (isHidden && !canEdit) return null;
 
-          {/* Meeting schedule inline — unions only */}
-          {club.orgType !== 'department' && club.meetingSchedule && club.meetingSchedule.length > 0 && (
-            <div className="border-t border-border pt-3">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                  <Calendar className="h-3.5 w-3.5" />
-                  Meeting Schedule
-                </span>
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={openScheduleEdit}
-                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
-                  >
-                    <Pencil className="h-3 w-3" />
-                    Edit
-                  </button>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {club.meetingSchedule.map((row, i) => (
-                  <div key={i} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-sm">
-                    <span className="font-medium">{row.day}</span>
-                    {row.time && <><span className="text-muted-foreground">·</span><span className="text-muted-foreground">{row.time}</span></>}
-                    {row.location && <><span className="text-muted-foreground">·</span><span className="flex items-center gap-0.5 text-muted-foreground"><MapPin className="h-3 w-3" />{row.location}</span></>}
-                  </div>
-                ))}
-              </div>
-              {club.meetingSchedule.some(r => r.notes) && (
-                <p className="text-xs text-muted-foreground mt-1.5">
-                  {club.meetingSchedule.filter(r => r.notes).map(r => r.notes).join(' · ')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* My Page link — visible to club admins for sharing in linktrees/bios */}
-          {canEdit && (
-            <div className="border-t border-border pt-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
-                <ExternalLink className="h-3.5 w-3.5" />
-                My Page Link
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 rounded bg-muted px-3 py-1.5 text-xs font-mono text-foreground truncate">
-                  {window.location.origin}/club/{clubId}
-                </code>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/club/${clubId}`);
-                    setPageLinkCopied(true);
-                    setTimeout(() => setPageLinkCopied(false), 2000);
-                  }}
-                  className="shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-border bg-background hover:bg-accent transition-colors"
-                  title="Copy link"
-                >
-                  {pageLinkCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
-                  {pageLinkCopied ? 'Copied!' : 'Copy'}
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Share this link in your Linktree, bio, or anywhere to send students directly to your page.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Events */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <CardTitle>Events</CardTitle>
-              <CardDescription>Events hosted by {club.name}</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              {canEdit && (
-                <Button size="sm" className="bg-primary" onClick={openCreateEvent}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add Event
-                </Button>
-              )}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input
-                  placeholder="Search…"
-                  value={localSearch}
-                  onChange={e => setLocalSearch(e.target.value)}
-                  className="pl-8 h-8 text-sm w-40"
-                />
-              </div>
-              <Select value={selectedType} onValueChange={setSelectedType}>
-                <SelectTrigger className="h-8 text-sm w-36">
-                  <SelectValue placeholder="All types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All types</SelectItem>
-                  {eventTypeNames.map(t => (
-                    <SelectItem key={t} value={t}>{t}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Upcoming */}
-          <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-3">Upcoming</h4>
-            {upcomingEvents.length === 0 ? (
-              <div className="text-center py-6 text-muted-foreground">
-                <Calendar className="h-10 w-10 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">No upcoming events{localSearch || selectedType !== 'all' ? ' matching filters' : ''}</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {upcomingEvents.map(renderEventCard)}
-              </div>
-            )}
-          </div>
-
-          {/* Past events toggle */}
-          <div className="border-t pt-3">
-            <button
-              type="button"
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              onClick={() => setShowPast(v => !v)}
-            >
-              {showPast ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              {showPast ? 'Hide past events' : `Show past events (${allPast.length})`}
-            </button>
-
-            {showPast && (
-              <div className="mt-3 space-y-3">
-                {pastEvents.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No past events{localSearch || selectedType !== 'all' ? ' matching filters' : ''}
-                  </p>
-                ) : (
-                  pastEvents.map(renderEventCard)
-                )}
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Our Team */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Our Team</CardTitle>
-              <CardDescription>Meet the people behind {club.name}</CardDescription>
-            </div>
-            {canEdit && (
-              <Badge variant="outline" className="text-xs">
-                Click a section's Add button to manage members
+        // Section-level admin controls: up / down / toggle
+        const sectionControls = canEdit ? (
+          <div className="flex items-center gap-0.5 shrink-0">
+            {isHidden && (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground mr-1 hidden sm:flex">
+                Hidden
               </Badge>
             )}
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7"
+              disabled={isFirst} onClick={() => moveSection(idx, -1)} title="Move up"
+            >
+              <ArrowUp className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7"
+              disabled={isLast} onClick={() => moveSection(idx, 1)} title="Move down"
+            >
+              <ArrowDown className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7"
+              onClick={() => toggleSection(section.id)}
+              title={isHidden ? 'Show section to visitors' : 'Hide section from visitors'}
+            >
+              {isHidden
+                ? <EyeOff className="h-3.5 w-3.5 text-muted-foreground" />
+                : <Eye className="h-3.5 w-3.5" />}
+            </Button>
           </div>
-        </CardHeader>
-        <CardContent>
-          <OurTeam
-            clubId={club.id}
-            canEdit={!!canEdit}
-            authToken={authToken}
-            orgType={club.orgType}
-            sectionLabels={club.sectionLabels}
-            onSectionLabelsChange={labels => updateClub(club.id, { sectionLabels: labels })}
-          />
-        </CardContent>
-      </Card>
+        ) : null;
 
-      {/* Meeting Schedule — full card for departments (or for admin editing on any org) */}
-      {(club.orgType === 'department' ? (club.meetingSchedule?.length || canEdit) : canEdit) && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Meeting Schedule</CardTitle>
-                <CardDescription>Approximate recurring meeting times for {club.name}</CardDescription>
+        const cardClass = isHidden ? 'opacity-60' : '';
+
+        // ── contact ──────────────────────────────────────────────────────────
+        if (section.id === 'contact') return (
+          <Card key="contact" className={cardClass}>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row gap-6">
+                <div
+                  className="w-24 h-24 rounded-lg flex items-center justify-center text-white shrink-0"
+                  style={{ backgroundColor: club.color }}
+                >
+                  {club.logo ? (
+                    <ImageWithFallback
+                      src={club.logo}
+                      alt={`${club.name} logo`}
+                      className="w-full h-full object-cover rounded-lg"
+                    />
+                  ) : (
+                    <span className="text-4xl">{club.name.substring(0, 2)}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <CardTitle className="text-3xl">{club.name}</CardTitle>
+                        <Badge variant="secondary">
+                          {club.orgType === 'department' ? 'Department' : 'Union'}
+                        </Badge>
+                        {club.collabCode && (
+                          <Badge variant="outline" className="font-mono text-xs text-muted-foreground">
+                            collab: {club.collabCode}
+                          </Badge>
+                        )}
+                      </div>
+                      <CardDescription className="text-base">
+                        {club.description || 'Student organization at the University of Oregon'}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      {sectionControls}
+                      {canEdit && (
+                        <Button onClick={() => setIsEditModalOpen(true)} variant="outline" size="sm">
+                          <Pencil className="h-4 w-4 mr-2" />
+                          <span className="hidden sm:inline">Edit Info</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {club.meetingSchedule?.length ? (
-                  <Button variant="outline" size="sm" onClick={downloadScheduleCsv}>
-                    <Download className="h-4 w-4 mr-1" />
-                    Download CSV
-                  </Button>
-                ) : null}
-                {canEdit && (
-                  <Button variant="outline" size="sm" onClick={openScheduleEdit}>
-                    <Pencil className="h-4 w-4 mr-1" />
-                    {club.meetingSchedule?.length ? 'Edit' : 'Add Schedule'}
-                  </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Contact email */}
+              {((club.contactEmail || club.adminEmail) || currentUser?.role === 'admin') && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  {editingEmail ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <input
+                        className="flex-1 border border-border rounded px-2 py-1 text-sm font-mono"
+                        value={emailInput}
+                        onChange={e => setEmailInput(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') saveEmail();
+                          if (e.key === 'Escape') setEditingEmail(false);
+                        }}
+                        autoFocus
+                        type="email"
+                      />
+                      <Button size="sm" onClick={saveEmail} disabled={savingEmail}>
+                        {savingEmail ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setEditingEmail(false)}>
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      {(club.contactEmail || club.adminEmail) ? (
+                        <button
+                          type="button"
+                          onClick={copyEmail}
+                          className="inline-flex items-center gap-1.5 text-sm font-mono hover:text-primary transition-colors"
+                          title="Click to copy"
+                        >
+                          {club.contactEmail || club.adminEmail}
+                          {emailCopied
+                            ? <Check className="h-3.5 w-3.5 text-green-500" />
+                            : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-muted-foreground italic">No email set</span>
+                      )}
+                      {currentUser?.role === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => { setEmailInput(club.contactEmail ?? club.adminEmail ?? ''); setEditingEmail(true); }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="Edit email"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Social links */}
+              <div className="flex flex-wrap gap-3">
+                {club.instagram && (
+                  <a href={club.instagram} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+                    <Instagram className="h-4 w-4" /><span className="text-sm">Instagram</span>
+                  </a>
+                )}
+                {club.linktree && (
+                  <a href={club.linktree} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+                    <LinkIcon className="h-4 w-4" /><span className="text-sm">Linktree</span>
+                  </a>
+                )}
+                {club.engage && (
+                  <a href={club.engage} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent transition-colors">
+                    <Globe className="h-4 w-4" /><span className="text-sm">Engage</span>
+                  </a>
                 )}
               </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {!club.meetingSchedule?.length ? (
-              <p className="text-sm text-muted-foreground">No meeting schedule set yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-28">Day</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground w-36">Time</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Location</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {club.meetingSchedule.map((row, i) => (
-                      <tr key={i}>
-                        <td className="py-2 pr-4 font-medium">{row.day}</td>
-                        <td className="py-2 pr-4 text-muted-foreground">{row.time}</td>
-                        <td className="py-2 pr-4 flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                          {row.location}
-                        </td>
-                        <td className="py-2 text-muted-foreground text-xs">{row.notes ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+
+              {/* Meeting Schedule — now lives inside Contact Info for everyone */}
+              {(club.meetingSchedule?.length || canEdit) && (
+                <div className="border-t border-border pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      Meeting Schedule
+                    </span>
+                    <div className="flex items-center gap-1">
+                      {club.meetingSchedule?.length ? (
+                        <button
+                          type="button"
+                          onClick={downloadScheduleCsv}
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                          title="Download CSV"
+                        >
+                          <Download className="h-3 w-3" />
+                        </button>
+                      ) : null}
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={openScheduleEdit}
+                          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          {club.meetingSchedule?.length ? 'Edit' : 'Add'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {!club.meetingSchedule?.length ? (
+                    <p className="text-xs text-muted-foreground">No meeting schedule set yet.</p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-2">
+                        {club.meetingSchedule.map((row, i) => (
+                          <div key={i} className="inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-sm">
+                            <span className="font-medium">{row.day}</span>
+                            {row.time && <><span className="text-muted-foreground">·</span><span className="text-muted-foreground">{row.time}</span></>}
+                            {row.location && <><span className="text-muted-foreground">·</span><span className="flex items-center gap-0.5 text-muted-foreground"><MapPin className="h-3 w-3" />{row.location}</span></>}
+                          </div>
+                        ))}
+                      </div>
+                      {club.meetingSchedule.some(r => r.notes) && (
+                        <p className="text-xs text-muted-foreground mt-1.5">
+                          {club.meetingSchedule.filter(r => r.notes).map(r => r.notes).join(' · ')}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* My Page link — admins only */}
+              {canEdit && (
+                <div className="border-t border-border pt-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    My Page Link
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded bg-muted px-3 py-1.5 text-xs font-mono text-foreground truncate">
+                      {window.location.origin}/club/{clubId}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}/club/${clubId}`);
+                        setPageLinkCopied(true);
+                        setTimeout(() => setPageLinkCopied(false), 2000);
+                      }}
+                      className="shrink-0 flex items-center gap-1 text-xs px-3 py-1.5 rounded border border-border bg-background hover:bg-accent transition-colors"
+                    >
+                      {pageLinkCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                      {pageLinkCopied ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Share this link in your Linktree or bio.</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
+        // ── events ───────────────────────────────────────────────────────────
+        if (section.id === 'events') return (
+          <Card key="events" className={cardClass}>
+            <CardHeader>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle>Events</CardTitle>
+                  <CardDescription>Events hosted by {club.name}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {sectionControls}
+                  {canEdit && (
+                    <Button size="sm" className="bg-primary" onClick={openCreateEvent}>
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Event
+                    </Button>
+                  )}
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      placeholder="Search…"
+                      value={localSearch}
+                      onChange={e => setLocalSearch(e.target.value)}
+                      className="pl-8 h-8 text-sm w-40"
+                    />
+                  </div>
+                  <Select value={selectedType} onValueChange={setSelectedType}>
+                    <SelectTrigger className="h-8 text-sm w-36">
+                      <SelectValue placeholder="All types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All types</SelectItem>
+                      {eventTypeNames.map(t => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <h4 className="text-sm font-medium text-muted-foreground mb-3">Upcoming</h4>
+                {upcomingEvents.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <Calendar className="h-10 w-10 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">No upcoming events{localSearch || selectedType !== 'all' ? ' matching filters' : ''}</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">{upcomingEvents.map(renderEventCard)}</div>
+                )}
+              </div>
+              <div className="border-t pt-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={() => setShowPast(v => !v)}
+                >
+                  {showPast ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {showPast ? 'Hide past events' : `Show past events (${allPast.length})`}
+                </button>
+                {showPast && (
+                  <div className="mt-3 space-y-3">
+                    {pastEvents.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No past events{localSearch || selectedType !== 'all' ? ' matching filters' : ''}
+                      </p>
+                    ) : pastEvents.map(renderEventCard)}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+        // ── office-hours ─────────────────────────────────────────────────────
+        if (section.id === 'office-hours') {
+          if (!ohSlots.length && !canEdit) return null;
+          return (
+            <Card key="office-hours" className={cardClass}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <CalendarClock className="h-5 w-5" />
+                      Office Hours
+                    </CardTitle>
+                    <CardDescription>Walk-in hours for {club.name}</CardDescription>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {sectionControls}
+                    {canEdit && (
+                      <Button variant="outline" size="sm" onClick={() => setIsOhEditorOpen(true)}>
+                        <Pencil className="h-4 w-4 mr-1" />
+                        <span className="hidden sm:inline">Manage</span>
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {ohSlots.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No office hours set yet.</p>
+                ) : (
+                  <OfficeHoursMiniCalendar
+                    clubId={club.id}
+                    clubColor={club.color}
+                    slots={ohSlots}
+                    exceptions={ohExceptions}
+                    members={ohMembers}
+                    canEdit={!!canEdit}
+                    onEditException={openOhExcDialog}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          );
+        }
+
+        // ── our-team ─────────────────────────────────────────────────────────
+        if (section.id === 'our-team') return (
+          <Card key="our-team" className={cardClass}>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Our Team</CardTitle>
+                  <CardDescription>Meet the people behind {club.name}</CardDescription>
+                </div>
+                <div className="flex items-center gap-1">
+                  {sectionControls}
+                  {canEdit && (
+                    <Badge variant="outline" className="text-xs hidden sm:flex">
+                      Click a section's Add button to manage members
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <OurTeam
+                clubId={club.id}
+                canEdit={!!canEdit}
+                authToken={authToken}
+                orgType={club.orgType}
+                sectionLabels={club.sectionLabels}
+                onSectionLabelsChange={labels => updateClub(club.id, { sectionLabels: labels })}
+              />
+            </CardContent>
+          </Card>
+        );
+
+        return null;
+      })}
 
       {/* Meeting Schedule Edit Dialog */}
       <Dialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
@@ -874,6 +1089,242 @@ export function ClubPage() {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Office Hours Editor Dialog */}
+      <Dialog open={isOhEditorOpen} onOpenChange={setIsOhEditorOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Manage Office Hours</DialogTitle>
+            <DialogDescription>
+              Set your recurring weekly office hours schedule and which team members will be present.
+              Individual weeks can be skipped or adjusted from the public calendar view.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Week grid — Mon–Fri columns */}
+          <div className="grid grid-cols-5 gap-2 mt-2">
+            {([1, 2, 3, 4, 5] as const).map(dow => {
+              const daySlots = ohSlots.filter(s => s.day_of_week === dow);
+              return (
+                <div key={dow} className="flex flex-col gap-2">
+                  <div className="text-xs font-semibold text-center text-muted-foreground uppercase tracking-wide py-1 border-b border-border">
+                    {DAY_FULL_NAMES[dow - 1].slice(0, 3)}
+                  </div>
+                  {daySlots.map(slot => {
+                    const slotMembers = ohMembers.filter(m => slot.member_ids.includes(m.id));
+                    return (
+                      <div
+                        key={slot.id}
+                        className="rounded border border-border bg-card p-2 text-xs space-y-1 group relative"
+                        style={{ borderLeftWidth: 3, borderLeftColor: club.color }}
+                      >
+                        <div className="font-medium">{slot.start_time} – {slot.end_time}</div>
+                        {slot.location && <div className="text-muted-foreground truncate">{slot.location}</div>}
+                        {slotMembers.length > 0 && (
+                          <div className="text-muted-foreground truncate">{slotMembers.map(m => m.name).join(', ')}</div>
+                        )}
+                        <div className="flex gap-1 pt-1">
+                          <button
+                            className="text-muted-foreground hover:text-foreground"
+                            title="Edit slot"
+                            onClick={() => openOhSlotForm(slot)}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                          <button
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Delete slot"
+                            disabled={deletingOhSlotId === slot.id}
+                            onClick={() => deleteOhSlot(slot.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button
+                    className="flex items-center justify-center gap-1 rounded border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 py-2 text-xs transition-colors"
+                    onClick={() => openOhSlotForm(undefined, dow)}
+                  >
+                    <Plus className="h-3 w-3" />
+                    Add
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-end pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => setIsOhEditorOpen(false)}>Done</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OH Slot Form Dialog (add / edit a recurring slot) */}
+      <Dialog open={ohSlotForm.isOpen} onOpenChange={open => setOhSlotForm(f => ({ ...f, isOpen: open }))}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{ohSlotForm.editingSlot ? 'Edit Office Hours Slot' : 'Add Office Hours Slot'}</DialogTitle>
+            <DialogDescription>This slot repeats every week. Individual weeks can be skipped or adjusted from the mini calendar.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Day of Week</Label>
+              <Select value={String(ohSlotForm.day)} onValueChange={v => setOhSlotForm(f => ({ ...f, day: Number(v) }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {([1, 2, 3, 4, 5] as const).map((d, i) => (
+                    <SelectItem key={d} value={String(d)}>{DAY_FULL_NAMES[i]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="oh-start">Start Time</Label>
+                <Input
+                  id="oh-start"
+                  type="time"
+                  value={ohSlotForm.startTime}
+                  onChange={e => setOhSlotForm(f => ({ ...f, startTime: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label htmlFor="oh-end">End Time</Label>
+                <Input
+                  id="oh-end"
+                  type="time"
+                  value={ohSlotForm.endTime}
+                  onChange={e => setOhSlotForm(f => ({ ...f, endTime: e.target.value }))}
+                  className="mt-1"
+                />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="oh-loc">Location (optional)</Label>
+              <Input
+                id="oh-loc"
+                value={ohSlotForm.location}
+                onChange={e => setOhSlotForm(f => ({ ...f, location: e.target.value }))}
+                placeholder="e.g. MCC Suite 305"
+                className="mt-1"
+              />
+            </div>
+            {ohMembers.length > 0 && (
+              <div>
+                <Label className="mb-2 block">Members present</Label>
+                <div className="space-y-1 max-h-48 overflow-y-auto rounded border border-border p-2">
+                  {ohMembers.map(m => (
+                    <label key={m.id} className="flex items-center gap-2 cursor-pointer py-1 px-1 rounded hover:bg-muted">
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5"
+                        checked={ohSlotForm.memberIds.includes(m.id)}
+                        onChange={e => setOhSlotForm(f => ({
+                          ...f,
+                          memberIds: e.target.checked
+                            ? [...f.memberIds, m.id]
+                            : f.memberIds.filter(id => id !== m.id),
+                        }))}
+                      />
+                      <span className="text-sm">{m.name}</span>
+                      <span className="text-xs text-muted-foreground">({m.title})</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => setOhSlotForm(f => ({ ...f, isOpen: false }))}>Cancel</Button>
+            <Button
+              className="bg-primary"
+              onClick={saveOhSlot}
+              disabled={savingOhSlot || !ohSlotForm.startTime || !ohSlotForm.endTime || ohSlotForm.startTime >= ohSlotForm.endTime}
+            >
+              {savingOhSlot ? 'Saving…' : ohSlotForm.editingSlot ? 'Save Changes' : 'Add Slot'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* OH Exception Dialog (skip or override a specific week) */}
+      <Dialog open={ohExcDialog.isOpen} onOpenChange={open => setOhExcDialog(d => ({ ...d, isOpen: open }))}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Adjust Week of {ohExcDialog.weekOf}</DialogTitle>
+            <DialogDescription>Override or skip this specific week. Other weeks are unaffected.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <button
+                className={`flex-1 rounded border py-2 text-sm font-medium transition-colors ${ohExcDialog.deleted ? 'border-destructive bg-destructive/10 text-destructive' : 'border-border text-muted-foreground hover:border-foreground/40'}`}
+                onClick={() => setOhExcDialog(d => ({ ...d, deleted: true }))}
+              >
+                Skip this week
+              </button>
+              <button
+                className={`flex-1 rounded border py-2 text-sm font-medium transition-colors ${!ohExcDialog.deleted ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-foreground/40'}`}
+                onClick={() => setOhExcDialog(d => ({ ...d, deleted: false }))}
+              >
+                Override details
+              </button>
+            </div>
+            {!ohExcDialog.deleted && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="exc-start">Start Time</Label>
+                    <Input id="exc-start" type="time" value={ohExcDialog.startTime} onChange={e => setOhExcDialog(d => ({ ...d, startTime: e.target.value }))} className="mt-1" />
+                  </div>
+                  <div>
+                    <Label htmlFor="exc-end">End Time</Label>
+                    <Input id="exc-end" type="time" value={ohExcDialog.endTime} onChange={e => setOhExcDialog(d => ({ ...d, endTime: e.target.value }))} className="mt-1" />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="exc-loc">Location</Label>
+                  <Input id="exc-loc" value={ohExcDialog.location} onChange={e => setOhExcDialog(d => ({ ...d, location: e.target.value }))} className="mt-1" />
+                </div>
+                {ohMembers.length > 0 && (
+                  <div>
+                    <Label className="mb-2 block">Members present this week</Label>
+                    <div className="space-y-1 max-h-40 overflow-y-auto rounded border border-border p-2">
+                      {ohMembers.map(m => (
+                        <label key={m.id} className="flex items-center gap-2 cursor-pointer py-1 px-1 rounded hover:bg-muted">
+                          <input
+                            type="checkbox"
+                            className="h-3.5 w-3.5"
+                            checked={ohExcDialog.memberIds.includes(m.id)}
+                            onChange={e => setOhExcDialog(d => ({
+                              ...d,
+                              memberIds: e.target.checked
+                                ? [...d.memberIds, m.id]
+                                : d.memberIds.filter(id => id !== m.id),
+                            }))}
+                          />
+                          <span className="text-sm">{m.name}</span>
+                          <span className="text-xs text-muted-foreground">({m.title})</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
+            <Button variant="outline" onClick={() => setOhExcDialog(d => ({ ...d, isOpen: false }))}>Cancel</Button>
+            <Button className={ohExcDialog.deleted ? 'bg-destructive hover:bg-destructive/90' : 'bg-primary'} onClick={saveOhException} disabled={savingOhExc}>
+              {savingOhExc ? 'Saving…' : ohExcDialog.deleted ? 'Skip this week' : 'Save override'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 

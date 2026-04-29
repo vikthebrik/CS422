@@ -65,6 +65,12 @@ export function EventPage() {
 
   const canEdit = currentUser && (currentUser.role === 'admin' || currentUser.clubId === event?.clubId);
 
+  // Office Hours events are fake (materialized) and have no EventPage — redirect to club page
+  if (event?.officeHourSlotId) {
+    navigate(`/club/${event.clubId}`, { replace: true });
+    return null;
+  }
+
   if (!event || !club) {
     return (
       <div className="text-center py-12">

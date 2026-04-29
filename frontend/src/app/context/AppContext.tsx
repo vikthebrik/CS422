@@ -9,14 +9,16 @@
  *   ├── useEvents(clubs)    → fetches GET /events after clubs load, maps → Event[]
  *   │                         also builds typeIdMap (name → UUID) from event data
  *   ├── GET /event-types    → populates eventTypeNames[], used by FilterSidebar
- *   └── GET /auth/me        → validates stored JWT on mount, restores session
+ *   ├── GET /auth/me        → validates stored JWT on mount, restores session
+ *   ├── GET /clubs/:id/office-hours  → fetches OH slots + exceptions for all clubs
+ *   └── GET /clubs/:id/members       → fetches members for all clubs (OH hydration)
  *
  * Consumers (via useApp()):
  *   Layout.tsx              reads currentUser to show role-gated nav tabs
  *   NavigationBar.tsx       reads/writes currentUser + authToken (sign-out)
  *   FilterSidebar.tsx       reads/writes selected*, advancedMode, perClubEventTypes
- *   Dashboard.tsx           reads events + all filter state to build filteredEvents
- *   ClubPage.tsx            reads clubs, events; calls addEvent / updateClub
+ *   Dashboard.tsx           reads allEvents + all filter state to build filteredEvents
+ *   ClubPage.tsx            reads clubs, events; calls addEvent / updateClub / reloadOhForClub
  *   ClubManagement.tsx      reads clubs, events; calls addClub / deleteEvent
  *   EventPage.tsx           reads events, clubs; calls updateEvent
  *   Collab.tsx              reads clubs, currentUser, authToken
@@ -34,18 +36,35 @@
  * - `advancedMode`: when true, `perClubEventTypes` is used instead of selectedEventTypes
  * - `perClubEventTypes`: Record<clubId, string[]> for per-club type overrides
  * - `searchQuery`: full-text filter on event title + description
+ *
+ * ## Office Hours
+ * OH slots are stored in the `office_hours` DB table (not `events`). They are
+ * fetched per-club after clubs load and materialized into fake Event objects via
+ * `materializeOhSlots`. These are merged into `allEvents` (a superset of `events`)
+ * and passed to the calendar. OH events are hidden by default (the "Office Hours"
+ * event type is excluded from `selectedEventTypes` on initial load).
  */
 
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { Event, Club, User } from '../types';
+import { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback, ReactNode } from 'react';
+import { addWeeks } from 'date-fns';
+import { Event, Club, User, OfficeHourSlot, OfficeHourException } from '../types';
 import { useClubs } from '../hooks/useClubs';
 import { useEvents } from '../hooks/useEvents';
+import { materializeOhSlots, getISOWeekMonday } from '../utils/officeHours';
+import type { ClubMember } from '../components/OurTeam';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'https://api.uomcc.org';
 const TOKEN_KEY = 'mcc_auth_token';
 
+interface OhClubData {
+  slots: OfficeHourSlot[];
+  exceptions: OfficeHourException[];
+}
+
 interface AppContextType {
   events: Event[];
+  /** Real events + materialized OH events merged — use this for the calendar */
+  allEvents: Event[];
   clubs: Club[];
   currentUser: User | null;
   authToken: string | null;
@@ -65,6 +84,12 @@ interface AppContextType {
   perClubEventTypes: Record<string, string[]>;
   loading: boolean;
   error: string | null;
+  /** OH slot templates + exceptions keyed by clubId */
+  ohData: Record<string, OhClubData>;
+  /** Club members keyed by clubId (used for OH member hydration) */
+  membersByClub: Record<string, ClubMember[]>;
+  /** Re-fetches OH data for one club — call after saving changes in the OH editor */
+  reloadOhForClub: (clubId: string) => Promise<void>;
   setSelectedClubs: (clubs: string[]) => void;
   setSelectedEventTypes: (types: string[]) => void;
   setSearchQuery: (q: string) => void;
@@ -97,6 +122,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [advancedMode, setAdvancedMode] = useState(false);
   const [perClubEventTypes, setPerClubEventTypes] = useState<Record<string, string[]>>({});
+
+  // Office Hours state
+  const [ohData, setOhData] = useState<Record<string, OhClubData>>({});
+  const [membersByClub, setMembersByClub] = useState<Record<string, ClubMember[]>>({});
 
   // Token persisted to localStorage so admins stay logged in across page reloads
   const [authToken, setAuthTokenState] = useState<string | null>(
@@ -163,6 +192,49 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .catch(() => { });
   }, []);
 
+  // Fetch OH slots + members for all clubs after clubs load
+  const ohLoadDone = useRef(false);
+  useEffect(() => {
+    if (apiClubs.length === 0 || ohLoadDone.current) return;
+    ohLoadDone.current = true;
+    apiClubs.forEach(club => {
+      fetch(`${API_BASE}/clubs/${club.id}/office-hours`)
+        .then(r => r.ok ? r.json() : { slots: [], exceptions: [] })
+        .then((d: OhClubData) => setOhData(prev => ({ ...prev, [club.id]: d })))
+        .catch(() => { });
+      fetch(`${API_BASE}/clubs/${club.id}/members`)
+        .then(r => r.ok ? r.json() : [])
+        .then((d: ClubMember[]) => setMembersByClub(prev => ({ ...prev, [club.id]: d })))
+        .catch(() => { });
+    });
+  }, [apiClubs]);
+
+  /** Re-fetch OH data for a single club (call after the OH editor saves changes). */
+  const reloadOhForClub = useCallback(async (clubId: string) => {
+    try {
+      const r = await fetch(`${API_BASE}/clubs/${clubId}/office-hours`);
+      if (r.ok) {
+        const d: OhClubData = await r.json();
+        setOhData(prev => ({ ...prev, [clubId]: d }));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  // Materialize OH events for a rolling ±4-week window (9 weeks total)
+  const ohEvents = useMemo(() => {
+    const thisMonday = getISOWeekMonday(new Date()); // Monday of the current week
+    const windowStart = addWeeks(thisMonday, -4);   // 4 weeks back
+    return clubs.flatMap(club => {
+      const { slots = [], exceptions = [] } = ohData[club.id] ?? {};
+      const members = membersByClub[club.id] ?? [];
+      if (slots.length === 0) return [];
+      return materializeOhSlots(slots, exceptions, members, club.id, club.color, windowStart, 9);
+    });
+  }, [ohData, membersByClub, clubs]);
+
+  // Merge real events + OH events — this is what the calendar consumes
+  const allEvents = useMemo(() => [...events, ...ohEvents], [events, ohEvents]);
+
   const addEvent = (event: Event) => setEvents(prev => [...prev, event]);
 
   const updateEvent = (id: string, updated: Partial<Event>) =>
@@ -183,6 +255,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     <AppContext.Provider
       value={{
         events,
+        allEvents,
         clubs,
         currentUser,
         authToken,
@@ -196,6 +269,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         perClubEventTypes,
         loading,
         error,
+        ohData,
+        membersByClub,
+        reloadOhForClub,
         setSelectedClubs,
         setSelectedEventTypes,
         setSearchQuery,

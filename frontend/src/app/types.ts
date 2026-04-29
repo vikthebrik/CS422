@@ -45,6 +45,39 @@ export interface Event {
   manuallyEdited?: boolean;
   synced?: boolean;
   collaborators?: CollaboratorInfo[];
+  /** Set on materialized office hours events — links back to the source OH slot */
+  officeHourSlotId?: string;
+  /** Hydrated members for OH events */
+  officeHourMembers?: { id: string; name: string; photo_url: string | null }[];
+}
+
+// ---------------------------------------------------------------------------
+// Office Hours types
+// ---------------------------------------------------------------------------
+
+export interface OfficeHourSlot {
+  id: string;
+  club_id: string;
+  /** ISO weekday: 1 = Monday … 5 = Friday */
+  day_of_week: 1 | 2 | 3 | 4 | 5;
+  start_time: string;   // 'HH:mm'
+  end_time: string;     // 'HH:mm'
+  location: string | null;
+  member_ids: string[];
+  active: boolean;
+}
+
+export interface OfficeHourException {
+  id: string;
+  slot_id: string;
+  /** ISO Monday of the target week, 'YYYY-MM-DD' */
+  week_of: string;
+  deleted: boolean;
+  /** null = use template value */
+  start_time: string | null;
+  end_time: string | null;
+  location: string | null;
+  member_ids: string[] | null;
 }
 
 export interface MeetingScheduleEntry {
@@ -52,6 +85,13 @@ export interface MeetingScheduleEntry {
   time: string;
   location: string;
   notes?: string;
+}
+
+export type ClubSectionId = 'contact' | 'events' | 'office-hours' | 'our-team';
+
+export interface ClubSectionConfig {
+  id: ClubSectionId;
+  visible: boolean;
 }
 
 export interface Club {
@@ -76,6 +116,8 @@ export interface Club {
   meetingSchedule?: MeetingScheduleEntry[];
   /** Short code set by MCC admin for use in [collab: X] Outlook description tags */
   collabCode?: string;
+  /** Ordered visibility config for page sections. Defaults to contact→events→office-hours→our-team. */
+  sectionConfig?: ClubSectionConfig[];
 }
 
 export interface User {
